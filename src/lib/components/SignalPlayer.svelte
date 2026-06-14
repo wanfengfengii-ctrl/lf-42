@@ -35,7 +35,9 @@
 
 	const totalDuration = $derived(
 		$signalGroups.reduce((total, group) => {
-			return total + group.flags.reduce((groupTotal, sf) => groupTotal + sf.duration, 0);
+			return total + group.flags.reduce((groupTotal, sf) => {
+				return groupTotal + (RAISE_DURATION / 1000) + sf.duration + (LOWER_DURATION / 1000);
+			}, 0);
 		}, 0)
 	);
 
@@ -89,6 +91,7 @@
 		groupIdx: number;
 		flagIdx: number;
 		holdRemaining: number;
+		holdTotal: number;
 	} {
 		let timeAccum = 0;
 		let groupIdx = 0;
@@ -96,6 +99,7 @@
 		let active: number | null = null;
 		const states: FlagPlayState[] = [];
 		let holdRemaining = 0;
+		let holdTotal = 0;
 		let found = false;
 
 		for (let gi = 0; gi < $signalGroups.length; gi++) {
@@ -114,6 +118,7 @@
 						groupIdx = gi;
 						flagIdx = fi;
 						holdRemaining = sf.duration;
+						holdTotal = sf.duration;
 						found = true;
 					} else if (elapsed * 1000 < timeAccum + raiseMs + holdMs) {
 						states.push('holding');
@@ -121,6 +126,7 @@
 						groupIdx = gi;
 						flagIdx = fi;
 						holdRemaining = (timeAccum + raiseMs + holdMs - elapsed * 1000) / 1000;
+						holdTotal = sf.duration;
 						found = true;
 					} else if (elapsed * 1000 < timeAccum + flagTotalMs) {
 						states.push('lowering');
@@ -128,6 +134,7 @@
 						groupIdx = gi;
 						flagIdx = fi;
 						holdRemaining = 0;
+						holdTotal = sf.duration;
 						found = true;
 					} else {
 						states.push('done');
@@ -139,7 +146,7 @@
 			}
 		}
 
-		return { states, active, groupIdx, flagIdx, holdRemaining };
+		return { states, active, groupIdx, flagIdx, holdRemaining, holdTotal };
 	}
 
 	function initFlagStates() {
@@ -192,6 +199,7 @@
 			flagStates = result.states;
 			activeFlagIndex = result.active;
 			holdRemainingTime = result.holdRemaining;
+			holdTotalDuration = result.holdTotal;
 			player.setCurrentPosition(result.groupIdx, result.flagIdx);
 			player.setProgress(pauseSnapshot.progress);
 			elapsedTime = pauseSnapshot.elapsedTime;
@@ -236,6 +244,7 @@
 		flagStates = result.states;
 		activeFlagIndex = result.active;
 		holdRemainingTime = result.holdRemaining;
+		holdTotalDuration = result.holdTotal;
 		
 		player.setCurrentPosition(result.groupIdx, result.flagIdx);
 		player.setProgress(totalDuration > 0 ? (elapsedTime / totalDuration) * 100 : 0);

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { FlagImage } from '$lib';
 	import type { SignalGroup } from '$lib/types';
-	import { training, currentTrainingSignal, generateValidatedSignal, statistics } from '$lib/stores/signalStore';
+	import { training, currentTrainingSignal, generateRandomSignal, generateValidatedSignal, statistics } from '$lib/stores/signalStore';
 	import { generateId, analyzeSubstituteUsage, validateSignalGroup } from '$lib/utils/validation';
 	import { Play, SkipForward, AlertTriangle, CheckCircle, XCircle, Clock, Trophy, Settings, Eye, EyeOff, CloudRain, Wind, Cloud, CloudFog, Zap, Sun, Lock, Unlock, ShieldAlert, Gauge, Flag } from 'lucide-svelte';
 
@@ -101,7 +101,9 @@
 			return;
 		}
 
-		const signal = generateValidatedSignal(difficulty);
+		const signal = validateFlagRules
+			? generateValidatedSignal(difficulty)
+			: generateRandomSignal(difficulty, false);
 		currentTrainingSignal.setSignal(signal);
 		remainingTime = timeLimit;
 		selectedAnswer = '';
