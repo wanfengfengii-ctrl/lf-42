@@ -1,5 +1,5 @@
 import { writable, derived, type Readable } from 'svelte/store';
-import type { SignalGroup, SignalFlag, PlayerState, TrainingSession, TrainingResult, Statistics, WeatherCondition } from '$lib/types';
+import type { SignalGroup, SignalFlag, PlayerState, TrainingSession, TrainingResult, Statistics, WeatherIntensity } from '$lib/types';
 import { generateId, getSignalMeaning, validateSignalGroup, validateFlagOrder } from '$lib/utils/validation';
 import { allFlags } from '$lib/data/flags';
 
@@ -70,7 +70,7 @@ function createPlayerStore() {
 		currentGroupIndex: 0,
 		currentFlagIndex: 0,
 		progress: 0,
-		weather: 'calm'
+		weatherIntensity: 0
 	});
 
 	return {
@@ -84,12 +84,12 @@ function createPlayerStore() {
 			currentGroupIndex: 0,
 			currentFlagIndex: 0,
 			progress: 0,
-			weather: 'calm'
+			weatherIntensity: 0
 		}),
 		setProgress: (progress: number) => update(state => ({ ...state, progress })),
 		setCurrentPosition: (groupIndex: number, flagIndex: number) => 
 			update(state => ({ ...state, currentGroupIndex: groupIndex, currentFlagIndex: flagIndex })),
-		setWeather: (weather: WeatherCondition) => update(state => ({ ...state, weather }))
+		setWeatherIntensity: (intensity: WeatherIntensity) => update(state => ({ ...state, weatherIntensity: Math.max(0, Math.min(100, intensity)) }))
 	};
 }
 

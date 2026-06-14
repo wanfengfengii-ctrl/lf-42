@@ -27,13 +27,15 @@ export interface ValidationResult {
 
 export type WeatherCondition = 'calm' | 'moderate' | 'storm' | 'fog';
 
+export type WeatherIntensity = number;
+
 export interface PlayerState {
 	isPlaying: boolean;
 	isPaused: boolean;
 	currentGroupIndex: number;
 	currentFlagIndex: number;
 	progress: number;
-	weather: WeatherCondition;
+	weatherIntensity: WeatherIntensity;
 }
 
 export interface TrainingResult {

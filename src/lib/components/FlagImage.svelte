@@ -1,32 +1,36 @@
 <script lang="ts">
-	import type { Flag, WeatherCondition } from '$lib/types';
+	import type { Flag } from '$lib/types';
 
 	let {
 		flag,
 		size = 80,
 		animated = false,
-		weather = 'calm'
+		weatherIntensity = 0
 	}: {
 		flag: Flag;
 		size?: number;
 		animated?: boolean;
-		weather?: WeatherCondition;
+		weatherIntensity?: number;
 	} = $props();
 
 	const aspectRatio = 1.5;
 	const width = $derived(size);
 	const height = $derived(size / aspectRatio);
-	const waveAmplitude = $derived(weather === 'storm' ? 6 : weather === 'moderate' ? 2 : 0);
-	const waveFrequency = $derived(weather === 'storm' ? 0.4 : weather === 'moderate' ? 0.2 : 0);
-	const blurAmount = $derived(weather === 'storm' ? 1 : weather === 'fog' ? 3 : 0);
-	const flagOpacity = $derived(weather === 'fog' ? 0.5 : weather === 'storm' ? 0.85 : 1);
-	const swingAmount = $derived(weather === 'storm' ? 12 : weather === 'moderate' ? 4 : 0);
+	const intensity = $derived(Math.max(0, Math.min(100, weatherIntensity)));
+
+	const waveAmplitude = $derived((intensity / 100) * 8);
+	const waveFrequency = $derived(0.05 + (intensity / 100) * 0.4);
+	const blurAmount = $derived(intensity > 60 ? (intensity - 60) / 15 : 0);
+	const flagOpacity = $derived(1 - (intensity / 100) * 0.6);
+	const swingAmount = $derived((intensity / 100) * 15);
 	const swingPositive = $derived(`${swingAmount}deg`);
 	const swingNegative = $derived(`${-swingAmount}deg`);
-	const filterStyle = $derived(blurAmount > 0 ? `blur(${blurAmount}px)` : 'none');
-	const hasFogOverlay = $derived(weather === 'fog' || weather === 'storm');
-	const hasRain = $derived(weather === 'storm');
-	const cloudDensity = $derived(weather === 'fog' ? 0.6 : weather === 'storm' ? 0.3 : 0);
+	const filterStyle = $derived(blurAmount > 0 ? `blur(${blurAmount.toFixed(1)}px)` : 'none');
+	const hasFogOverlay = $derived(intensity > 20);
+	const hasRain = $derived(intensity > 50);
+	const hasLightning = $derived(intensity >= 85);
+	const cloudDensity = $derived(intensity > 50 ? 0.2 + (intensity - 50) / 100 * 0.6 : (intensity / 50) * 0.3);
+	const rainCount = $derived(Math.floor((intensity - 50) / 50 * 20));
 
 	const patternId = $derived(`pattern-${flag.id}`);
 	const waveFilterId = $derived(`wave-${flag.id}`);
@@ -53,6 +57,15 @@
 	);
 
 	const diagonalStripeWidth = $derived(142 / (colors.length * 2));
+
+	function getIntensityLabel(i: number): string {
+		if (i === 0) return '晴';
+		if (i <= 20) return '微风';
+		if (i <= 40) return '轻浪';
+		if (i <= 60) return '强风';
+		if (i <= 80) return '暴雨';
+		return '台风';
+	}
 </script>
 
 <svg
@@ -65,22 +78,22 @@
 	style:filter={filterStyle}
 	style:--swing-positive={swingPositive}
 	style:--swing-negative={swingNegative}
-	class:flag-animated={animated && (weather === 'moderate' || weather === 'storm')}
-	class:flag-storm={animated && weather === 'storm'}
-	class:flag-fog={weather === 'fog'}
+	class:flag-animated={animated && intensity > 10}
+	class:flag-storm={animated && intensity > 60}
+	class:flag-hurricane={animated && intensity >= 85}
 >
 	<defs>
 		<filter id={waveFilterId} x="-10%" y="-10%" width="120%" height="120%">
 			<feTurbulence
 				type="fractalNoise"
-				baseFrequency={waveFrequency}
+				baseFrequency={waveFrequency.toFixed(3)}
 				numOctaves="3"
 				result="turbulence"
 			>
 				{#if animated && waveFrequency > 0}
 					<animate
 						attributeName="baseFrequency"
-						values={`${waveFrequency};${waveFrequency * 1.5};${waveFrequency}`}
+						values={`${waveFrequency.toFixed(3)};${(waveFrequency * 1.5).toFixed(3)};${waveFrequency.toFixed(3)}`}
 						dur="2s"
 						repeatCount="indefinite"
 					/>
@@ -105,7 +118,7 @@
 			<stop offset="100%" stop-color="rgba(0,0,0,0.08)" />
 		</linearGradient>
 
-		{#if hasFogOverlay}
+		{#if hasFogOverlay && animated}
 			<filter id={fogId} x="-50%" y="-50%" width="200%" height="200%">
 				<feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="4" result="fogNoise">
 					<animate
@@ -281,19 +294,23 @@
 
 	{#if hasRain && animated}
 		<g class="rain-container">
-			{#each Array.from({ length: 12 }) as _, i}
+			{#each Array.from({ length: rainCount }) as _, i}
 				<line
-					x1={10 + (i * 12) % 140}
+					x1={10 + (i * 137) % 140}
 					y1="-5"
-					x2={5 + (i * 12) % 140}
-					y2="8"
-					stroke="rgba(200, 220, 255, 0.6)"
-					stroke-width="1"
+					x2={5 + (i * 137) % 140}
+					y2="10"
+					stroke="rgba(180, 210, 255, 0.6)"
+					stroke-width="0.8"
 					class="rain-drop"
-					style:animation-delay={`${i * 0.15}s`}
+					style:animation-delay={`${(i % 8) * 0.08}s`}
 				/>
 			{/each}
 		</g>
+	{/if}
+
+	{#if hasLightning && animated}
+		<rect class="lightning-flash" width="100%" height="100%" fill="rgba(255,255,255,0.8)" opacity="0" />
 	{/if}
 
 	<rect x="0" y="0" width="1.5" height="100%" fill="#8B7355" rx="0.5" />
@@ -309,6 +326,10 @@
 	.flag-storm {
 		animation-duration: 1s;
 		animation-timing-function: ease-in-out;
+	}
+
+	.flag-hurricane {
+		animation-duration: 0.7s;
 	}
 
 	@keyframes flag-swing {
@@ -340,12 +361,12 @@
 		}
 		50% {
 			transform: translateX(5px);
-			opacity: 0.8;
+			opacity: 0.85;
 		}
 	}
 
 	.rain-drop {
-		animation: rain-fall 0.6s linear infinite;
+		animation: rain-fall 0.5s linear infinite;
 	}
 
 	@keyframes rain-fall {
@@ -360,13 +381,23 @@
 			opacity: 0.6;
 		}
 		100% {
-			transform: translateY(105px);
+			transform: translateY(110px);
 			opacity: 0;
 		}
 	}
 
-	.flag-fog {
-		transition: opacity 0.5s ease, filter 0.5s ease;
+	.lightning-flash {
+		animation: lightning 4.5s ease-in-out infinite;
+		mix-blend-mode: screen;
+	}
+
+	@keyframes lightning {
+		0%, 92%, 94%, 96%, 100% {
+			opacity: 0;
+		}
+		93%, 95% {
+			opacity: 0.85;
+		}
 	}
 
 	svg {

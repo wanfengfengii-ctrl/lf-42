@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { FlagImage } from '$lib';
 	import { signalGroups, player } from '$lib/stores/signalStore';
-	import type { SignalFlag, WeatherCondition } from '$lib/types';
-	import { Play, Pause, Square, FastForward, Cloud, Wind, CloudRain, CloudFog } from 'lucide-svelte';
+	import type { SignalFlag, WeatherIntensity } from '$lib/types';
+	import { Play, Pause, Square, Sun, Wind, CloudRain, Zap } from 'lucide-svelte';
 
 	let { flagSize = 120 }: { flagSize?: number } = $props();
 
@@ -27,20 +27,22 @@
 	let holdStartTime = $state<number>(0);
 
 	const speeds = [0.5, 1, 1.5, 2];
-	const weatherConditions: WeatherCondition[] = ['calm', 'moderate', 'storm', 'fog'];
-	const weatherLabels: Record<WeatherCondition, string> = {
-		calm: '平静',
-		moderate: '微风',
-		storm: '暴风雨',
-		fog: '大雾'
-	};
 
-	const weatherIcons: Record<WeatherCondition, typeof Cloud> = {
-		calm: Cloud,
-		moderate: Wind,
-		storm: CloudRain,
-		fog: CloudFog
-	};
+	function getWeatherLabel(i: number): string {
+		if (i === 0) return '晴朗';
+		if (i <= 20) return '微风';
+		if (i <= 40) return '轻浪';
+		if (i <= 60) return '强风';
+		if (i <= 80) return '暴雨';
+		return '台风';
+	}
+
+	function getWeatherIcon(i: number): typeof Sun {
+		if (i === 0) return Sun;
+		if (i <= 40) return Wind;
+		if (i <= 80) return CloudRain;
+		return Zap;
+	}
 
 	const RAISE_DURATION = 800;
 	const LOWER_DURATION = 600;
@@ -113,17 +115,17 @@
 		return element.animate(keyframes, options);
 	}
 
-	function createSwingAnimation(element: HTMLElement, weather: WeatherCondition): Animation {
-		const swingAmount = weather === 'storm' ? 8 : weather === 'moderate' ? 3 : 0;
-		const duration = weather === 'storm' ? 800 : weather === 'moderate' ? 2000 : 3000;
+	function createSwingAnimation(element: HTMLElement, intensity: WeatherIntensity): Animation {
+		const swingAmount = (intensity / 100) * 12;
+		const duration = 3000 - (intensity / 100) * 2000;
 		
-		const keyframes = swingAmount > 0
+		const keyframes = swingAmount > 0.5
 			? [
-				{ transform: 'rotate(0deg)' },
-				{ transform: `rotate(${swingAmount}deg)` },
-				{ transform: 'rotate(0deg)' },
-				{ transform: `rotate(${-swingAmount}deg)` },
-				{ transform: 'rotate(0deg)' }
+				{ transform: 'rotate(0deg) skewY(0deg)' },
+				{ transform: `rotate(${swingAmount * 0.5}deg) skewY(${swingAmount * 0.1}deg)` },
+				{ transform: 'rotate(0deg) skewY(0deg)' },
+				{ transform: `rotate(${-swingAmount * 0.5}deg) skewY(${-swingAmount * 0.1}deg)` },
+				{ transform: 'rotate(0deg) skewY(0deg)' }
 			]
 			: [
 				{ transform: 'rotate(0deg)' },
@@ -131,7 +133,7 @@
 			];
 
 		const options = {
-			duration,
+			duration: Math.max(800, duration),
 			easing: 'ease-in-out',
 			iterations: Infinity,
 			fill: 'forwards' as FillMode
@@ -184,7 +186,7 @@
 
 		flagStates[index] = 'holding';
 
-		const swingAnim = createSwingAnimation(element, $player.weather);
+		const swingAnim = createSwingAnimation(element, $player.weatherIntensity);
 		swingAnim.playbackRate = playbackSpeed;
 		swingAnimations[index] = swingAnim;
 
@@ -409,14 +411,17 @@
 		setAnimationPlaybackRate(lowerAnimations, speed);
 	}
 
-	function handleWeatherChange(weather: WeatherCondition) {
-		player.setWeather(weather);
+	function handleWeatherIntensityChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const intensity = parseInt(target.value, 10);
+		player.setWeatherIntensity(intensity);
+		
 		if (activeFlagIndex !== null && swingAnimations[activeFlagIndex]) {
 			const element = flagContainers[activeFlagIndex];
 			if (element) {
 				const currentTime = swingAnimations[activeFlagIndex]?.currentTime as number || 0;
 				swingAnimations[activeFlagIndex]?.cancel();
-				const newSwingAnim = createSwingAnimation(element, weather);
+				const newSwingAnim = createSwingAnimation(element, intensity);
 				newSwingAnim.playbackRate = playbackSpeed;
 				newSwingAnim.currentTime = currentTime;
 				swingAnimations[activeFlagIndex] = newSwingAnim;
@@ -439,38 +444,41 @@
 </script>
 
 <div class="bg-surface-100-800-token rounded-xl p-6 shadow-lg space-y-6">
-	<div class="flex items-center justify-between">
+	<div class="flex items-center justify-between flex-wrap gap-4">
 		<h3 class="text-xl font-bold text-surface-900-100-token">信号播放</h3>
-		<div class="flex items-center gap-2">
-			<span class="text-sm text-surface-600-400-token">天气:</span>
-			<div class="flex gap-1">
-				{#each weatherConditions as weather}
-					{@const WeatherIcon = weatherIcons[weather]}
-					<button
-						onclick={() => handleWeatherChange(weather)}
-						class="p-2 rounded-lg transition-all"
-						class:bg-primary-500={$player.weather === weather}
-						class:text-white={$player.weather === weather}
-						class:bg-surface-200-700-token={$player.weather !== weather}
-						class:text-surface-600-400-token={$player.weather !== weather}
-						class:hover:bg-surface-300-600-token={$player.weather !== weather}
-						title={weatherLabels[weather]}
-					>
-						<WeatherIcon class="w-4 h-4" />
-					</button>
+		<div class="flex items-center gap-4 flex-wrap">
+			<div class="flex items-center gap-3 min-w-[280px]">
+				{#each [getWeatherIcon($player.weatherIntensity)] as WeatherIcon}
+					<WeatherIcon class="w-5 h-5 text-surface-500 flex-shrink-0" />
 				{/each}
+				<input
+					type="range"
+					value={$player.weatherIntensity}
+					oninput={handleWeatherIntensityChange}
+					min="0"
+					max="100"
+					step="1"
+					class="flex-1 w-full accent-primary-500"
+				/>
+				<div class="flex flex-col items-end text-right flex-shrink-0 min-w-[60px]">
+					<span class="text-xs font-semibold text-primary-500">{$player.weatherIntensity}%</span>
+					<span class="text-[10px] text-surface-500">{getWeatherLabel($player.weatherIntensity)}</span>
+				</div>
 			</div>
 		</div>
 	</div>
 
 	<div class="relative bg-surface-50-900-token rounded-xl p-8 min-h-[200px] border border-surface-200-700-token overflow-hidden">
-		{#if $player.weather === 'fog'}
-			<div class="absolute inset-0 bg-surface-300-600-token/40 pointer-events-none z-20"></div>
+		{#if $player.weatherIntensity > 50}
+			<div 
+				class="absolute inset-0 pointer-events-none z-20"
+				style:background="rgba(200, 210, 230, 0.15)"
+			></div>
 		{/if}
 
-		{#if $player.weather === 'storm'}
+		{#if $player.weatherIntensity > 80}
 			<div class="absolute inset-0 pointer-events-none z-20 overflow-hidden">
-				<div class="absolute inset-0 bg-surface-700-300-token/10 animate-pulse"></div>
+				<div class="absolute inset-0 bg-surface-300-600-token/20 animate-pulse"></div>
 			</div>
 		{/if}
 
@@ -492,7 +500,7 @@
 								flag={sf.flag}
 								size={flagSize}
 								animated={false}
-								weather={$player.weather}
+								weatherIntensity={$player.weatherIntensity}
 							/>
 						</div>
 					</div>
@@ -537,7 +545,7 @@
 		</div>
 	{/if}
 
-	<div class="flex items-center justify-between">
+	<div class="flex items-center justify-between flex-wrap gap-4">
 		<div class="flex items-center gap-2">
 			<span class="text-sm text-surface-600-400-token">速度:</span>
 			<div class="flex gap-1">
