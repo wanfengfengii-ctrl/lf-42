@@ -23,11 +23,66 @@ export interface SignalGroup {
 export interface ValidationResult {
 	valid: boolean;
 	message?: string;
+	ruleViolation?: ValidationRuleType;
+	violationCode?: string;
 }
 
-export type WeatherCondition = 'calm' | 'moderate' | 'storm' | 'fog';
+export type ValidationRuleType = 
+	| 'GROUP_SIZE'
+	| 'DURATION'
+	| 'SUBSTITUTE_POSITION'
+	| 'SUBSTITUTE_ONLY'
+	| 'SUBSTITUTE_REFERENCE'
+	| 'SUBSTITUTE_CONSECUTIVE'
+	| 'SUBSTITUTE_DUPLICATE'
+	| 'DUPLICATE_WITHOUT_SUBSTITUTE'
+	| 'INVALID_SIGNAL_CODE'
+	| 'SIGNAL_MEANING_NOT_FOUND'
+	| 'NUMBER_FLAG_ORDER'
+	| 'LETTER_NUMBER_MIX'
+	| 'GROUP_STRUCTURE';
+
+export interface DetailedValidationResult extends ValidationResult {
+	warnings?: ValidationResult[];
+	rulesChecked?: string[];
+	substituteAnalysis?: SubstituteAnalysis;
+}
+
+export interface SubstituteAnalysis {
+	totalSubstitutes: number;
+	validReferences: number;
+	invalidReferences: Array<{
+		code: string;
+		position: number;
+		reason: string;
+	}>;
+	expandedCodes?: string[];
+}
+
+export interface SignalCodeInfo {
+	code: string;
+	type: 'single' | 'two-letter' | 'three-letter' | 'numeric' | 'alphanumeric' | 'bearing' | 'distress';
+	isStandard: boolean;
+	meaning?: string;
+	category?: string;
+}
+
+export type WeatherCondition = 'calm' | 'light' | 'moderate' | 'strong' | 'storm' | 'typhoon' | 'fog-light' | 'fog-heavy' | 'fog-storm';
 
 export type WeatherIntensity = number;
+
+export interface WeatherEffect {
+	visibility: number;
+	swingAmplitude: number;
+	waveAmplitude: number;
+	blurAmount: number;
+	fogOpacity: number;
+	rainIntensity: number;
+	lightningFrequency: number;
+	debrisAmount: number;
+	occlusionStrength: number;
+	difficultyMultiplier: number;
+}
 
 export interface PlayerState {
 	isPlaying: boolean;
@@ -49,7 +104,15 @@ export interface TrainingResult {
 	isMisjudged: boolean;
 	reactionTime: number;
 	timeLimit: number;
+	misjudgedFlagIds?: string[];
+	userInputCodes?: string[];
+	weatherIntensity?: number;
+	isBlindMode?: boolean;
+	sessionId?: string;
+	resultCategory?: 'timeout' | 'misjudged' | 'correct';
 }
+
+export type ResultCategory = 'timeout' | 'misjudged' | 'correct';
 
 export interface TrainingSession {
 	id: string;
@@ -57,6 +120,9 @@ export interface TrainingSession {
 	endTime?: number;
 	results: TrainingResult[];
 	difficulty: 'easy' | 'medium' | 'hard';
+	weatherIntensity?: number;
+	isBlindMode?: boolean;
+	maxQuestions?: number;
 }
 
 export interface Statistics {
@@ -68,6 +134,11 @@ export interface Statistics {
 	accuracyHistory: { session: number; accuracy: number }[];
 	reactionTimeHistory: { session: number; time: number }[];
 	mostMisjudged: { flagId: string; count: number }[];
+	perSessionAccuracy: { sessionId: string; sessionNum: number; accuracy: number; total: number; correct: number; timestamp?: number }[];
+	perQuestionReactionTime: { questionNum: number; time: number; isCorrect: boolean; category: ResultCategory }[];
+	misjudgedWithDetails: { flagId: string; count: number; confusedWithIds?: string[] }[];
+	flagErrorRate: { flagId: string; code: string; name: string; totalAppearances: number; errorCount: number; errorRate: number }[];
+	reactionTimeTrend: { questionNum: number; time: number; category: ResultCategory; rollingAvg: number }[];
 }
 
 export type PageMode = 'compose' | 'train' | 'review';

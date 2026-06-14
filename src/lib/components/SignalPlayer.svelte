@@ -1,49 +1,35 @@
 <script lang="ts">
 	import { FlagImage } from '$lib';
 	import { signalGroups, player } from '$lib/stores/signalStore';
-	import type { SignalFlag, WeatherIntensity } from '$lib/types';
-	import { Play, Pause, Square, Sun, Wind, CloudRain, Zap } from 'lucide-svelte';
+	import type { WeatherIntensity } from '$lib/types';
+	import { Play, Pause, Square, Sun, Wind, CloudRain, Zap, CloudFog } from 'lucide-svelte';
 
 	let { flagSize = 120 }: { flagSize?: number } = $props();
 
 	let playbackSpeed = $state(1);
-	let flagContainers = $state<(HTMLDivElement | null)[]>([]);
-	let raiseAnimations = $state<(Animation | null)[]>([]);
-	let swingAnimations = $state<(Animation | null)[]>([]);
-	let lowerAnimations = $state<(Animation | null)[]>([]);
-
-	let savedRaiseTimes = $state<(number | null)[]>([]);
-	let savedSwingTimes = $state<(number | null)[]>([]);
-	let savedLowerTimes = $state<(number | null)[]>([]);
-
-	let elapsedTime = $state(0);
 	let animationFrameId = $state<number | null>(null);
 	let lastTimestamp = $state<number | null>(null);
-	let activeFlagIndex = $state<number | null>(null);
 
 	type FlagPlayState = 'idle' | 'raising' | 'holding' | 'lowering' | 'done';
 	let flagStates = $state<FlagPlayState[]>([]);
+	let activeFlagIndex = $state<number | null>(null);
 	let holdRemainingTime = $state<number>(0);
 	let holdStartTime = $state<number>(0);
+	let holdTotalDuration = $state<number>(0);
+	let elapsedTime = $state(0);
+
+	let pauseSnapshot = $state<{
+		elapsedTime: number;
+		flagStates: FlagPlayState[];
+		activeFlagIndex: number | null;
+		holdRemainingTime: number;
+		holdElapsedRatio: number;
+		groupIndex: number;
+		flagIndex: number;
+		progress: number;
+	} | null>(null);
 
 	const speeds = [0.5, 1, 1.5, 2];
-
-	function getWeatherLabel(i: number): string {
-		if (i === 0) return '晴朗';
-		if (i <= 20) return '微风';
-		if (i <= 40) return '轻浪';
-		if (i <= 60) return '强风';
-		if (i <= 80) return '暴雨';
-		return '台风';
-	}
-
-	function getWeatherIcon(i: number): typeof Sun {
-		if (i === 0) return Sun;
-		if (i <= 40) return Wind;
-		if (i <= 80) return CloudRain;
-		return Zap;
-	}
-
 	const RAISE_DURATION = 800;
 	const LOWER_DURATION = 600;
 
@@ -69,20 +55,8 @@
 		formatTime(remainingTime)
 	);
 
-	const formattedElapsedTime = $derived(
-		formatTime(elapsedTime)
-	);
-
-	const progressPercent = $derived(
-		totalDuration > 0 ? (elapsedTime / totalDuration) * 100 : 0
-	);
-
-	const hasContent = $derived(
-		$signalGroups.length > 0
-	);
-
-	const allActiveFlags = $derived(
-		$signalGroups.flatMap(group => group.flags)
+	const formattedTotalTime = $derived(
+		formatTime(totalDuration)
 	);
 
 	function formatTime(seconds: number): string {
@@ -91,518 +65,420 @@
 		return `${mins}:${secs.toString().padStart(2, '0')}`;
 	}
 
-	function initStates() {
-		const count = allActiveFlags.length;
-		flagStates = Array(count).fill('idle');
-		raiseAnimations = Array(count).fill(null);
-		swingAnimations = Array(count).fill(null);
-		lowerAnimations = Array(count).fill(null);
-		savedRaiseTimes = Array(count).fill(null);
-		savedSwingTimes = Array(count).fill(null);
-		savedLowerTimes = Array(count).fill(null);
+	function getWeatherLabel(i: number): string {
+		if (i === 0) return '晴朗';
+		if (i <= 20) return '微风';
+		if (i <= 40) return '轻浪';
+		if (i <= 60) return '强风';
+		if (i <= 80) return '暴雨';
+		return '台风';
 	}
 
-	function createRaiseAnimation(element: HTMLElement): Animation {
-		const keyframes = [
-			{ transform: 'translateY(100%)', opacity: 0 },
-			{ transform: 'translateY(0)', opacity: 1 }
-		];
-		const options = {
-			duration: RAISE_DURATION,
-			easing: 'ease-out',
-			fill: 'forwards' as FillMode
-		};
-		return element.animate(keyframes, options);
+	function getWeatherIcon(i: number): typeof Sun {
+		if (i === 0) return Sun;
+		if (i <= 20) return Wind;
+		if (i <= 40) return CloudFog;
+		if (i <= 60) return Wind;
+		if (i <= 80) return CloudRain;
+		return Zap;
 	}
 
-	function createSwingAnimation(element: HTMLElement, intensity: WeatherIntensity): Animation {
-		const swingAmount = (intensity / 100) * 12;
-		const duration = 3000 - (intensity / 100) * 2000;
-		
-		const keyframes = swingAmount > 0.5
-			? [
-				{ transform: 'rotate(0deg) skewY(0deg)' },
-				{ transform: `rotate(${swingAmount * 0.5}deg) skewY(${swingAmount * 0.1}deg)` },
-				{ transform: 'rotate(0deg) skewY(0deg)' },
-				{ transform: `rotate(${-swingAmount * 0.5}deg) skewY(${-swingAmount * 0.1}deg)` },
-				{ transform: 'rotate(0deg) skewY(0deg)' }
-			]
-			: [
-				{ transform: 'rotate(0deg)' },
-				{ transform: 'rotate(0deg)' }
-			];
+	function computeFlagStatesAndPosition(elapsed: number): {
+		states: FlagPlayState[];
+		active: number | null;
+		groupIdx: number;
+		flagIdx: number;
+		holdRemaining: number;
+	} {
+		let timeAccum = 0;
+		let groupIdx = 0;
+		let flagIdx = 0;
+		let active: number | null = null;
+		const states: FlagPlayState[] = [];
+		let holdRemaining = 0;
+		let found = false;
 
-		const options = {
-			duration: Math.max(800, duration),
-			easing: 'ease-in-out',
-			iterations: Infinity,
-			fill: 'forwards' as FillMode
-		};
+		for (let gi = 0; gi < $signalGroups.length; gi++) {
+			const group = $signalGroups[gi];
+			for (let fi = 0; fi < group.flags.length; fi++) {
+				const sf = group.flags[fi];
+				const raiseMs = RAISE_DURATION;
+				const holdMs = sf.duration * 1000;
+				const lowerMs = LOWER_DURATION;
+				const flagTotalMs = raiseMs + holdMs + lowerMs;
 
-		return element.animate(keyframes, options);
-	}
-
-	function createLowerAnimation(element: HTMLElement): Animation {
-		const keyframes = [
-			{ transform: 'translateY(0)', opacity: 1 },
-			{ transform: 'translateY(100%)', opacity: 0 }
-		];
-		const options = {
-			duration: LOWER_DURATION,
-			easing: 'ease-in',
-			fill: 'forwards' as FillMode
-		};
-		return element.animate(keyframes, options);
-	}
-
-	function setAnimationPlaybackRate(animations: (Animation | null)[], rate: number) {
-		animations.forEach(anim => {
-			if (anim && anim.playState !== 'idle') {
-				anim.playbackRate = rate;
+				if (!found) {
+					if (elapsed * 1000 < timeAccum + raiseMs) {
+						states.push('raising');
+						active = states.length - 1;
+						groupIdx = gi;
+						flagIdx = fi;
+						holdRemaining = sf.duration;
+						found = true;
+					} else if (elapsed * 1000 < timeAccum + raiseMs + holdMs) {
+						states.push('holding');
+						active = states.length - 1;
+						groupIdx = gi;
+						flagIdx = fi;
+						holdRemaining = (timeAccum + raiseMs + holdMs - elapsed * 1000) / 1000;
+						found = true;
+					} else if (elapsed * 1000 < timeAccum + flagTotalMs) {
+						states.push('lowering');
+						active = states.length - 1;
+						groupIdx = gi;
+						flagIdx = fi;
+						holdRemaining = 0;
+						found = true;
+					} else {
+						states.push('done');
+					}
+				} else {
+					states.push('idle');
+				}
+				timeAccum += flagTotalMs / 1000;
 			}
-		});
-	}
-
-	function startRaise(index: number) {
-		const element = flagContainers[index];
-		if (!element) return;
-
-		flagStates[index] = 'raising';
-		activeFlagIndex = index;
-
-		const raiseAnim = createRaiseAnimation(element);
-		raiseAnim.playbackRate = playbackSpeed;
-		raiseAnimations[index] = raiseAnim;
-
-		raiseAnim.onfinish = () => {
-			if (flagStates[index] !== 'raising') return;
-			startHold(index);
-		};
-	}
-
-	function startHold(index: number) {
-		const element = flagContainers[index];
-		if (!element) return;
-
-		flagStates[index] = 'holding';
-
-		const swingAnim = createSwingAnimation(element, $player.weatherIntensity);
-		swingAnim.playbackRate = playbackSpeed;
-		swingAnimations[index] = swingAnim;
-
-		const sf = allActiveFlags[index];
-		holdRemainingTime = sf.duration * 1000;
-		holdStartTime = performance.now();
-	}
-
-	function startLower(index: number) {
-		const element = flagContainers[index];
-		if (!element) return;
-
-		flagStates[index] = 'lowering';
-
-		if (swingAnimations[index]) {
-			swingAnimations[index]?.cancel();
-			swingAnimations[index] = null;
 		}
 
-		const lowerAnim = createLowerAnimation(element);
-		lowerAnim.playbackRate = playbackSpeed;
-		lowerAnimations[index] = lowerAnim;
-
-		lowerAnim.onfinish = () => {
-			flagStates[index] = 'done';
-			activeFlagIndex = null;
-			advanceToNextFlag();
-		};
+		return { states, active, groupIdx, flagIdx, holdRemaining };
 	}
 
-	function updateHoldProgress(deltaMs: number) {
-		if (activeFlagIndex === null || flagStates[activeFlagIndex] !== 'holding') return;
-
-		holdRemainingTime -= deltaMs * playbackSpeed;
-
-		if (holdRemainingTime <= 0) {
-			startLower(activeFlagIndex);
-		}
-	}
-
-	function pauseAllAnimations() {
-		raiseAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'running') {
-				savedRaiseTimes[i] = anim.currentTime as number | null;
-				anim.pause();
-			}
-		});
-		swingAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'running') {
-				savedSwingTimes[i] = anim.currentTime as number | null;
-				anim.pause();
-			}
-		});
-		lowerAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'running') {
-				savedLowerTimes[i] = anim.currentTime as number | null;
-				anim.pause();
-			}
-		});
-
-		if (activeFlagIndex !== null && flagStates[activeFlagIndex] === 'holding') {
-			const now = performance.now();
-			holdRemainingTime -= (now - holdStartTime) * playbackSpeed;
-		}
-	}
-
-	function resumeAllAnimations() {
-		raiseAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'paused' && savedRaiseTimes[i] !== null) {
-				anim.currentTime = savedRaiseTimes[i];
-				anim.play();
-			}
-		});
-		swingAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'paused' && savedSwingTimes[i] !== null) {
-				anim.currentTime = savedSwingTimes[i];
-				anim.play();
-			}
-		});
-		lowerAnimations.forEach((anim, i) => {
-			if (anim && anim.playState === 'paused' && savedLowerTimes[i] !== null) {
-				anim.currentTime = savedLowerTimes[i];
-				anim.play();
-			}
-		});
-
-		if (activeFlagIndex !== null && flagStates[activeFlagIndex] === 'holding') {
-			holdStartTime = performance.now();
-		}
-	}
-
-	function cancelAnimationAtIndex(index: number) {
-		raiseAnimations[index]?.cancel();
-		swingAnimations[index]?.cancel();
-		lowerAnimations[index]?.cancel();
-		raiseAnimations[index] = null;
-		swingAnimations[index] = null;
-		lowerAnimations[index] = null;
-		savedRaiseTimes[index] = null;
-		savedSwingTimes[index] = null;
-		savedLowerTimes[index] = null;
-	}
-
-	function cancelAllAnimations() {
-		raiseAnimations.forEach(anim => anim?.cancel());
-		swingAnimations.forEach(anim => anim?.cancel());
-		lowerAnimations.forEach(anim => anim?.cancel());
-		raiseAnimations = [];
-		swingAnimations = [];
-		lowerAnimations = [];
-		savedRaiseTimes = [];
-		savedSwingTimes = [];
-		savedLowerTimes = [];
+	function initFlagStates() {
+		const allFlags = $signalGroups.flatMap(g => g.flags);
+		flagStates = allFlags.map(() => 'idle' as FlagPlayState);
 		activeFlagIndex = null;
-		flagStates = [];
 		holdRemainingTime = 0;
-	}
-
-	function advanceToNextFlag() {
-		if (!$player.isPlaying || $player.isPaused) return;
-
-		const currentGroup = $signalGroups[$player.currentGroupIndex];
-		if (!currentGroup) {
-			handlePlaybackComplete();
-			return;
-		}
-
-		let nextFlagIndex = $player.currentFlagIndex + 1;
-		let nextGroupIndex = $player.currentGroupIndex;
-
-		if (nextFlagIndex >= currentGroup.flags.length) {
-			nextFlagIndex = 0;
-			nextGroupIndex++;
-		}
-
-		if (nextGroupIndex >= $signalGroups.length) {
-			handlePlaybackComplete();
-			return;
-		}
-
-		player.setCurrentPosition(nextGroupIndex, nextFlagIndex);
-		startRaise(getAbsoluteIndex(nextGroupIndex, nextFlagIndex));
-	}
-
-	function getAbsoluteIndex(groupIndex: number, flagIndex: number): number {
-		let absoluteIndex = 0;
-		for (let i = 0; i < groupIndex; i++) {
-			absoluteIndex += $signalGroups[i].flags.length;
-		}
-		return absoluteIndex + flagIndex;
-	}
-
-	function handlePlaybackComplete() {
-		stopTimer();
-		cancelAllAnimations();
-		player.stop();
 		elapsedTime = 0;
+		pauseSnapshot = null;
 	}
 
-	function startTimer() {
-		lastTimestamp = performance.now();
-		const tick = (timestamp: number) => {
-			if (lastTimestamp !== null && !$player.isPaused) {
-				const delta = timestamp - lastTimestamp;
-				elapsedTime += (delta / 1000) * playbackSpeed;
-				player.setProgress(Math.min(1, elapsedTime / totalDuration));
-				updateHoldProgress(delta);
-			}
-			lastTimestamp = timestamp;
-			animationFrameId = requestAnimationFrame(tick);
-		};
+	function startPlayback() {
+		if ($signalGroups.length === 0) return;
+		initFlagStates();
+		player.play();
+		lastTimestamp = null;
 		animationFrameId = requestAnimationFrame(tick);
 	}
 
-	function stopTimer() {
+	function pausePlayback() {
+		if (!$player.isPlaying || $player.isPaused) return;
+		
+		player.pause();
+		
+		pauseSnapshot = {
+			elapsedTime,
+			flagStates: [...flagStates],
+			activeFlagIndex,
+			holdRemainingTime,
+			holdElapsedRatio: holdTotalDuration > 0 ? holdRemainingTime / holdTotalDuration : 0,
+			groupIndex: $player.currentGroupIndex,
+			flagIndex: $player.currentFlagIndex,
+			progress: $player.progress
+		};
+
 		if (animationFrameId !== null) {
 			cancelAnimationFrame(animationFrameId);
 			animationFrameId = null;
 		}
-		lastTimestamp = null;
 	}
 
-	function handlePlay() {
-		if (!hasContent) return;
-
-		if ($player.isPaused) {
-			player.resume();
-			resumeAllAnimations();
-			startTimer();
-		} else if (!$player.isPlaying) {
-			initStates();
-			player.play();
-			startTimer();
-			startRaise(0);
-		}
-	}
-
-	function handlePause() {
-		if (!$player.isPlaying || $player.isPaused) return;
-		player.pause();
-		pauseAllAnimations();
-		stopTimer();
-	}
-
-	function handleStop() {
-		stopTimer();
-		cancelAllAnimations();
-		player.stop();
-		elapsedTime = 0;
-	}
-
-	function handleSpeedChange(speed: number) {
-		if (activeFlagIndex !== null && flagStates[activeFlagIndex] === 'holding') {
-			const now = performance.now();
-			holdRemainingTime -= (now - holdStartTime) * playbackSpeed;
-			holdStartTime = now;
-		}
-
-		playbackSpeed = speed;
-		setAnimationPlaybackRate(raiseAnimations, speed);
-		setAnimationPlaybackRate(swingAnimations, speed);
-		setAnimationPlaybackRate(lowerAnimations, speed);
-	}
-
-	function handleWeatherIntensityChange(e: Event) {
-		const target = e.target as HTMLInputElement;
-		const intensity = parseInt(target.value, 10);
-		player.setWeatherIntensity(intensity);
+	function resumePlayback() {
+		if (!$player.isPaused) return;
 		
-		if (activeFlagIndex !== null && swingAnimations[activeFlagIndex]) {
-			const element = flagContainers[activeFlagIndex];
-			if (element) {
-				const currentTime = swingAnimations[activeFlagIndex]?.currentTime as number || 0;
-				swingAnimations[activeFlagIndex]?.cancel();
-				const newSwingAnim = createSwingAnimation(element, intensity);
-				newSwingAnim.playbackRate = playbackSpeed;
-				newSwingAnim.currentTime = currentTime;
-				swingAnimations[activeFlagIndex] = newSwingAnim;
-			}
+		player.resume();
+		lastTimestamp = null;
+		
+		if (pauseSnapshot) {
+			const result = computeFlagStatesAndPosition(pauseSnapshot.elapsedTime);
+			flagStates = result.states;
+			activeFlagIndex = result.active;
+			holdRemainingTime = result.holdRemaining;
+			player.setCurrentPosition(result.groupIdx, result.flagIdx);
+			player.setProgress(pauseSnapshot.progress);
+			elapsedTime = pauseSnapshot.elapsedTime;
+		}
+		
+		animationFrameId = requestAnimationFrame(tick);
+	}
+
+	function stopPlayback() {
+		if (animationFrameId !== null) {
+			cancelAnimationFrame(animationFrameId);
+			animationFrameId = null;
+		}
+		player.stop();
+		initFlagStates();
+		elapsedTime = 0;
+		lastTimestamp = null;
+		pauseSnapshot = null;
+	}
+
+	function tick(timestamp: number) {
+		if (!$player.isPlaying || $player.isPaused) return;
+
+		if (lastTimestamp === null) {
+			lastTimestamp = timestamp;
+			animationFrameId = requestAnimationFrame(tick);
+			return;
+		}
+
+		const delta = (timestamp - lastTimestamp) / 1000;
+		lastTimestamp = timestamp;
+
+		elapsedTime += delta * playbackSpeed;
+
+		if (elapsedTime >= totalDuration) {
+			elapsedTime = totalDuration;
+			stopPlayback();
+			return;
+		}
+
+		const result = computeFlagStatesAndPosition(elapsedTime);
+		flagStates = result.states;
+		activeFlagIndex = result.active;
+		holdRemainingTime = result.holdRemaining;
+		
+		player.setCurrentPosition(result.groupIdx, result.flagIdx);
+		player.setProgress(totalDuration > 0 ? (elapsedTime / totalDuration) * 100 : 0);
+
+		animationFrameId = requestAnimationFrame(tick);
+	}
+
+	function getFlagStateClass(state: FlagPlayState): string {
+		switch (state) {
+			case 'raising': return 'flag-raise';
+			case 'holding': return 'flag-hold';
+			case 'lowering': return 'flag-lower';
+			case 'done': return 'flag-done';
+			default: return 'flag-idle';
 		}
 	}
 
-	$effect(() => {
-		if ($signalGroups.length > 0) {
-			initStates();
+	function getFlagOpacity(state: FlagPlayState): number {
+		switch (state) {
+			case 'idle': return 0.15;
+			case 'done': return 0.35;
+			case 'lowering': return 0.6;
+			default: return 1;
 		}
-	});
+	}
 
 	$effect(() => {
 		return () => {
-			stopTimer();
-			cancelAllAnimations();
+			if (animationFrameId !== null) {
+				cancelAnimationFrame(animationFrameId);
+			}
 		};
 	});
 </script>
 
-<div class="bg-surface-100-800-token rounded-xl p-6 shadow-lg space-y-6">
-	<div class="flex items-center justify-between flex-wrap gap-4">
+<div class="bg-surface-100-800-token rounded-xl p-6 shadow-lg">
+	<div class="flex items-center justify-between mb-4">
 		<h3 class="text-xl font-bold text-surface-900-100-token">信号播放</h3>
-		<div class="flex items-center gap-4 flex-wrap">
-			<div class="flex items-center gap-3 min-w-[280px]">
-				{#each [getWeatherIcon($player.weatherIntensity)] as WeatherIcon}
-					<WeatherIcon class="w-5 h-5 text-surface-500 flex-shrink-0" />
-				{/each}
-				<input
-					type="range"
-					value={$player.weatherIntensity}
-					oninput={handleWeatherIntensityChange}
-					min="0"
-					max="100"
-					step="1"
-					class="flex-1 w-full accent-primary-500"
-				/>
-				<div class="flex flex-col items-end text-right flex-shrink-0 min-w-[60px]">
-					<span class="text-xs font-semibold text-primary-500">{$player.weatherIntensity}%</span>
-					<span class="text-[10px] text-surface-500">{getWeatherLabel($player.weatherIntensity)}</span>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="relative bg-surface-50-900-token rounded-xl p-8 min-h-[200px] border border-surface-200-700-token overflow-hidden">
-		{#if $player.weatherIntensity > 50}
-			<div 
-				class="absolute inset-0 pointer-events-none z-20"
-				style:background="rgba(200, 210, 230, 0.15)"
-			></div>
-		{/if}
-
-		{#if $player.weatherIntensity > 80}
-			<div class="absolute inset-0 pointer-events-none z-20 overflow-hidden">
-				<div class="absolute inset-0 bg-surface-300-600-token/20 animate-pulse"></div>
-			</div>
-		{/if}
-
-		{#if !hasContent}
-			<div class="flex items-center justify-center h-48 text-surface-500">
-				暂无信号组，请先添加信号组
-			</div>
-		{:else}
-			<div class="flex items-end justify-center gap-4 h-48">
-				{#each allActiveFlags as sf, index (sf.flag.id + index)}
-					<div class="relative flex flex-col items-center">
-						<div class="w-1 h-full bg-surface-400 absolute left-1/2 -translate-x-1/2 bottom-0 rounded-full" style="height: calc(100% - {flagSize / 1.5}px);"></div>
-						<div
-							bind:this={flagContainers[index]}
-							class="relative z-10 overflow-visible flag-init-hidden"
-							style:transform-origin="left center"
-						>
-							<FlagImage
-								flag={sf.flag}
-								size={flagSize}
-								animated={false}
-								weatherIntensity={$player.weatherIntensity}
-							/>
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</div>
-
-	<div class="space-y-3">
-		<div class="flex items-center justify-between text-sm">
-			<span class="text-surface-600-400-token">
-				{formattedElapsedTime}
-			</span>
-			<span class="text-surface-600-400-token">
-				{formattedRemainingTime}
-			</span>
-		</div>
-		<div class="h-2 bg-surface-200-700-token rounded-full overflow-hidden">
-			<div
-				class="h-full bg-primary-500 transition-all duration-100 rounded-full"
-				style:width={progressPercent + '%'}
-			></div>
-		</div>
-	</div>
-
-	{#if currentGroup}
-		<div class="p-4 bg-surface-50-900-token rounded-lg border border-surface-200-700-token">
-			<div class="flex items-center justify-between mb-2">
-				<div class="flex items-center gap-2">
-					<span class="px-2 py-1 bg-primary-100-800-token text-primary-700-300-token text-xs font-semibold rounded">
-						#{$player.currentGroupIndex + 1} / {$signalGroups.length}
-					</span>
-					<span class="font-mono text-lg font-bold text-surface-900-100-token">
-						{currentGroup.flags.map(f => f.flag.code).join(' ')}
-					</span>
-				</div>
-				<span class="text-sm text-surface-500">
-					旗帜 {$player.currentFlagIndex + 1} / {currentGroup.flags.length}
-				</span>
-			</div>
-			<p class="text-sm text-surface-600-400-token">{currentGroup.meaning}</p>
-		</div>
-	{/if}
-
-	<div class="flex items-center justify-between flex-wrap gap-4">
 		<div class="flex items-center gap-2">
-			<span class="text-sm text-surface-600-400-token">速度:</span>
+			<span class="text-sm text-surface-600-400-token">播放速度:</span>
 			<div class="flex gap-1">
-				{#each speeds as speed}
+				{#each speeds as s}
 					<button
-						onclick={() => handleSpeedChange(speed)}
-						class="px-3 py-1 rounded-lg text-sm font-medium transition-all"
-						class:bg-primary-500={playbackSpeed === speed}
-						class:text-white={playbackSpeed === speed}
-						class:bg-surface-200-700-token={playbackSpeed !== speed}
-						class:text-surface-600-400-token={playbackSpeed !== speed}
-						class:hover:bg-surface-300-600-token={playbackSpeed !== speed}
+						onclick={() => playbackSpeed = s}
+						class="px-3 py-1 rounded text-xs font-semibold transition-all {playbackSpeed === s ? 'bg-primary-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token text-surface-700-300-token'}"
 					>
-						{speed}x
+						{s}x
 					</button>
 				{/each}
 			</div>
 		</div>
+	</div>
 
-		<div class="flex items-center gap-2">
-			<button
-				onclick={handleStop}
-				disabled={!hasContent || (!$player.isPlaying && !$player.isPaused)}
-				class="flex items-center gap-2 px-4 py-2 bg-surface-200-700-token hover:bg-surface-300-600-token disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-				title="停止"
-			>
-				<Square class="w-4 h-4" />
-			</button>
+	<div class="mb-4">
+		<div class="flex items-center justify-between mb-2">
+			<span class="text-sm text-surface-500">{formattedRemainingTime}</span>
+			<span class="text-sm text-surface-500">{formattedTotalTime}</span>
+		</div>
+		<div class="w-full h-2 bg-surface-200-700-token rounded-full overflow-hidden">
+			<div
+				class="h-full bg-primary-500 rounded-full transition-all duration-100"
+				style="width: {$player.progress}%"
+			></div>
+		</div>
+	</div>
 
-			{#if !$player.isPlaying || $player.isPaused}
+	{#if $signalGroups.length === 0}
+		<div class="border-2 border-dashed border-surface-300-600-token rounded-xl p-8 text-center text-surface-500">
+			请先在编排页面添加旗组
+		</div>
+	{:else}
+		<div class="space-y-4 mb-6 min-h-64">
+			{#each $signalGroups as group, gi}
+				<div class="p-4 bg-surface-50-900-token rounded-lg border border-surface-200-700-token">
+					<div class="flex items-center gap-2 mb-3">
+						<span class="px-2 py-0.5 bg-primary-500/20 text-primary-600-400-token text-xs font-semibold rounded">
+							旗组 #{gi + 1}
+						</span>
+						<span class="text-sm text-surface-600-400-token">{group.meaning}</span>
+					</div>
+					<div class="flex items-center gap-4 flex-wrap">
+						{#each group.flags as sf, fi}
+							{@const flatIndex = $signalGroups.slice(0, gi).reduce((acc, g) => acc + g.flags.length, 0) + fi}
+							{@const state = flagStates[flatIndex] || 'idle'}
+							{@const isActive = activeFlagIndex === flatIndex}
+							<div class="flex flex-col items-center gap-2 transition-all duration-300 {getFlagStateClass(state)}"
+								style:opacity={getFlagOpacity(state)}
+							>
+								<div class="relative">
+									<FlagImage
+										flag={sf.flag}
+										size={flagSize}
+										animated={isActive}
+										weatherIntensity={$player.weatherIntensity}
+									/>
+									{#if isActive && state === 'holding'}
+										<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-16 h-1 bg-surface-200-700-token rounded-full overflow-hidden">
+											<div
+												class="h-full bg-success-500 rounded-full transition-all duration-100"
+												style="width: {holdTotalDuration > 0 ? ((1 - holdRemainingTime / holdTotalDuration) * 100) : 0}%"
+											></div>
+										</div>
+									{/if}
+								</div>
+								<div class="text-center">
+									<span class="text-xs font-mono font-bold {isActive ? 'text-primary-500' : 'text-surface-500'}">
+										{sf.flag.code}
+									</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+	<div class="flex items-center justify-between flex-wrap gap-4">
+		<div class="flex items-center gap-3">
+			{#if !$player.isPlaying}
 				<button
-					onclick={handlePlay}
-					disabled={!hasContent}
-					class="flex items-center gap-2 px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white disabled:bg-surface-400 disabled:cursor-not-allowed rounded-lg transition-colors"
-					title={$player.isPaused ? '继续' : '播放'}
+					onclick={startPlayback}
+					disabled={$signalGroups.length === 0}
+					class="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
 				>
-					<Play class="w-4 h-4" />
-					<span>{$player.isPaused ? '继续' : '播放'}</span>
+					<Play class="w-5 h-5" />
+					播放
+				</button>
+			{:else if $player.isPaused}
+				<button
+					onclick={resumePlayback}
+					class="flex items-center gap-2 px-6 py-2.5 bg-success-500 hover:bg-success-600 text-white rounded-lg transition-colors font-medium"
+				>
+					<Play class="w-5 h-5" />
+					继续
 				</button>
 			{:else}
 				<button
-					onclick={handlePause}
-					disabled={!hasContent}
-					class="flex items-center gap-2 px-6 py-2 bg-warning-500 hover:bg-warning-600 text-white disabled:bg-surface-400 disabled:cursor-not-allowed rounded-lg transition-colors"
-					title="暂停"
+					onclick={pausePlayback}
+					class="flex items-center gap-2 px-6 py-2.5 bg-warning-500 hover:bg-warning-600 text-white rounded-lg transition-colors font-medium"
 				>
-					<Pause class="w-4 h-4" />
-					<span>暂停</span>
+					<Pause class="w-5 h-5" />
+					暂停
+				</button>
+			{/if}
+
+			{#if $player.isPlaying}
+				<button
+					onclick={stopPlayback}
+					class="flex items-center gap-2 px-4 py-2.5 bg-surface-200-700-token hover:bg-surface-300-600-token rounded-lg transition-colors"
+				>
+					<Square class="w-4 h-4" />
+					停止
 				</button>
 			{/if}
 		</div>
+
+		<div class="flex items-center gap-3">
+			{#each [getWeatherIcon($player.weatherIntensity)] as WeatherIcon}
+				<WeatherIcon class="w-5 h-5 text-surface-500" />
+			{/each}
+			<input
+				type="range"
+				min="0"
+				max="100"
+				step="1"
+				value={$player.weatherIntensity}
+				onchange={(e) => player.setWeatherIntensity(parseInt((e.target as HTMLInputElement).value))}
+				class="w-32 accent-primary-500"
+			/>
+			<span class="text-xs text-surface-500 min-w-[60px]">{getWeatherLabel($player.weatherIntensity)} {$player.weatherIntensity}%</span>
+		</div>
 	</div>
+
+	{#if $player.isPlaying && activeFlagIndex !== null}
+		<div class="mt-4 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg flex items-center gap-3">
+			<span class="px-2 py-0.5 bg-primary-500/20 text-primary-600-400-token text-xs font-semibold rounded">
+				当前旗位
+			</span>
+			<span class="text-sm font-medium text-surface-900-100-token">
+				旗组 #{$player.currentGroupIndex + 1} - 第 {$player.currentFlagIndex + 1} 面
+				{#if currentFlag}
+					({currentFlag.flag.code} - {currentFlag.flag.name})
+				{/if}
+			</span>
+			{#if flagStates[activeFlagIndex] === 'holding'}
+				<span class="ml-auto text-xs text-success-600 font-medium">
+					停留中 {holdRemainingTime.toFixed(1)}s
+				</span>
+			{:else if flagStates[activeFlagIndex] === 'raising'}
+				<span class="ml-auto text-xs text-warning-600 font-medium">
+					升旗中...
+				</span>
+			{:else if flagStates[activeFlagIndex] === 'lowering'}
+				<span class="ml-auto text-xs text-error-600 font-medium">
+					降旗中...
+				</span>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
-	.flag-init-hidden {
-		transform: translateY(100%);
-		opacity: 0;
+	.flag-raise {
+		animation: player-raise 0.8s ease-out forwards;
+	}
+
+	.flag-hold {
+		animation: none;
+	}
+
+	.flag-lower {
+		animation: player-lower 0.6s ease-in forwards;
+	}
+
+	.flag-done {
+		opacity: 0.35;
+		transform: translateY(20px);
+	}
+
+	.flag-idle {
+		opacity: 0.15;
+	}
+
+	@keyframes player-raise {
+		from {
+			transform: translateY(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
+	@keyframes player-lower {
+		from {
+			transform: translateY(0);
+			opacity: 1;
+		}
+		to {
+			transform: translateY(20px);
+			opacity: 0.35;
+		}
 	}
 </style>
