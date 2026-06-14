@@ -10,12 +10,14 @@ import type {
 	BestCollaborationPlan,
 	ScenarioErrorDetail,
 	CollaborativeRoleType,
-	RoleRequiredGroup
+	RoleRequiredGroup,
+	SignalGroup
 } from '$lib/types';
-import { generateId, expandSignalCodes, validateSignalGroup, validateFlagOrder } from './validation';
-import { getFlagByCode } from '$lib/data/flags';
-import type { SignalGroup, SignalFlag } from '$lib/types';
+import { generateId, validateSignalGroup, validateFlagOrder } from './validation';
+import { buildUserScenarioGroups, codesToFlags, normalizeCodes, codesMatch } from './groupConversion';
 import { collaborativeRoleLabels } from '$lib/data/collaborativeScenarios';
+
+export { buildUserScenarioGroups, codesToFlags } from './groupConversion';
 
 const CONSISTENCY_WEIGHT = 25;
 const TIMING_WEIGHT = 25;
@@ -582,40 +584,7 @@ function formatTime(seconds: number): string {
 	return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function normalizeCodes(codes: string[]): string[] {
-	return codes
-		.map(c => c.toUpperCase().trim())
-		.filter(c => c.length > 0);
-}
 
-function codesMatch(a: string[], b: string[]): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) {
-		if (a[i] !== b[i]) return false;
-	}
-	return true;
-}
-
-export function buildUserScenarioGroups(groups: SignalGroup[]): UserScenarioGroup[] {
-	return groups.map((g, idx) => ({
-		id: g.id,
-		order: idx,
-		flags: g.flags,
-		codes: expandSignalCodes(g.flags),
-		duration: g.duration || 3
-	}));
-}
-
-export function codesToFlags(codes: string[]): SignalFlag[] {
-	const flags: SignalFlag[] = [];
-	for (const code of codes) {
-		const flag = getFlagByCode(code);
-		if (flag) {
-			flags.push({ flag, duration: 3 });
-		}
-	}
-	return flags;
-}
 
 export function createCollaborativeResult(
 	scenario: CollaborativeScenarioInfo,

@@ -1,11 +1,9 @@
 <script lang="ts">
-	import { FlagImage, FlagLibrary, CollaborativeResultPanel } from '$lib';
+	import { CollaborativeResultPanel, FlagGroupEditor, SignalGroupList } from '$lib';
 	import type {
-		SignalFlag,
 		Flag,
 		CollaborativeScenarioInfo,
 		CollaborativeRoleType,
-		UserScenarioGroup,
 		SignalGroup
 	} from '$lib/types';
 	import {
@@ -20,8 +18,8 @@
 		buildUserScenarioGroups,
 		createCollaborativeResult
 	} from '$lib/utils/collaborativeEvaluation';
-	import { validateFlagOrder, generateId } from '$lib/utils/validation';
 	import { getFlagByCode } from '$lib/data/flags';
+	import { createFlagGroupEditor } from '$lib/composables/useFlagGroupEditor.svelte';
 	import {
 		Users, Ship, Navigation, Anchor, Radio, Plus, Trash2, ArrowUp, ArrowDown,
 		Clock, AlertTriangle, CheckCircle, GripVertical, ChevronRight, Target, Trophy,
@@ -42,12 +40,9 @@
 	let playerConfigs = $state<Array<{ name: string; roleType: CollaborativeRoleType }>>([]);
 	let currentPlayerIndex = $state(0);
 
-	let currentEditingGroup = $state<SignalFlag[]>([]);
 	let playerSignalGroups = $state<Record<string, SignalGroup[]>>({});
-	let showLibrary = $state(false);
-	let errorMessage = $state<string | null>(null);
-	let successMessage = $state<string | null>(null);
-	let currentGroupDuration = $state<number>(3);
+
+	const editor = createFlagGroupEditor();
 
 	const categoryOptions: Array<{ value: ScenarioCategory | 'all'; label: string; icon: typeof Ship }> = [
 		{ value: 'all', label: '全部场景', icon: Layers },
@@ -78,8 +73,6 @@
 		})
 	);
 
-	let orderValidation = $derived(currentEditingGroup.length > 0 ? validateFlagOrder(currentEditingGroup) : null);
-
 	function goToRoleSetup(scenario: CollaborativeScenarioInfo) {
 		currentScenario = scenario;
 		playerConfigs = scenario.availableRoles.map(rt => ({
@@ -94,8 +87,7 @@
 		if (!currentScenario) return;
 		const validConfigs = playerConfigs.filter(pc => pc.name.trim().length > 0);
 		if (validConfigs.length < currentScenario.minPlayers) {
-			errorMessage = `至少需要 ${currentScenario.minPlayers} 名玩家`;
-			setTimeout(() => (errorMessage = null), 3000);
+			editor.showError(`至少需要 ${currentScenario.minPlayers} 名玩家`);
 			return;
 		}
 
@@ -139,65 +131,18 @@
 
 	function switchPlayer(index: number) {
 		currentPlayerIndex = index;
-		currentEditingGroup = [];
-	}
-
-	function addFlag(flag: Flag) {
-		if (currentEditingGroup.length >= 5) {
-			errorMessage = '信号组最多包含5面旗帜';
-			setTimeout(() => (errorMessage = null), 3000);
-			return;
-		}
-		currentEditingGroup.push({ flag, duration: 3 });
-		showLibrary = false;
-	}
-
-	function removeFlag(index: number) {
-		currentEditingGroup.splice(index, 1);
-	}
-
-	function moveFlag(fromIndex: number, toIndex: number) {
-		if (toIndex < 0 || toIndex >= currentEditingGroup.length) return;
-		const [removed] = currentEditingGroup.splice(fromIndex, 1);
-		currentEditingGroup.splice(toIndex, 0, removed);
-	}
-
-	function clearCurrent() {
-		currentEditingGroup = [];
-		currentGroupDuration = 3;
+		editor.currentFlags = [];
 	}
 
 	function addToPlayerGroups() {
 		if (!currentPlayer) return;
-		if (currentEditingGroup.length === 0) {
-			errorMessage = '请至少选择一面旗帜';
-			setTimeout(() => (errorMessage = null), 3000);
-			return;
-		}
+		const existingGroups = playerSignalGroups[currentPlayer.name] || [];
+		const group = editor.buildSignalGroup(existingGroups.length);
+		if (!group) return;
 
-		const orderCheck = validateFlagOrder(currentEditingGroup);
-		if (!orderCheck.valid) {
-			errorMessage = orderCheck.message || '信号组不合法';
-			setTimeout(() => (errorMessage = null), 3000);
-			return;
-		}
-
-		const meaning = currentEditingGroup.map(f => f.flag.code).join('');
-		const group: SignalGroup = {
-			id: generateId(),
-			flags: [...currentEditingGroup],
-			order: (playerSignalGroups[currentPlayer.name] || []).length,
-			meaning,
-			duration: currentGroupDuration
-		};
-
-		playerSignalGroups[currentPlayer.name] = [...(playerSignalGroups[currentPlayer.name] || []), group];
-		successMessage = '信号组已添加！';
-		setTimeout(() => {
-			successMessage = null;
-		}, 2000);
-		currentEditingGroup = [];
-		currentGroupDuration = 3;
+		playerSignalGroups[currentPlayer.name] = [...existingGroups, group];
+		editor.showSuccess('信号组已添加！');
+		editor.resetAfterAdd();
 	}
 
 	function removePlayerGroup(playerName: string, groupId: string) {
@@ -218,12 +163,6 @@
 			if (g.id !== groupId) return g;
 			return { ...g, duration: Math.max(1, duration) };
 		});
-	}
-
-	function updateCurrentFlagDuration(index: number, duration: number) {
-		const newGroup = [...currentEditingGroup];
-		newGroup[index] = { ...newGroup[index], duration: Math.max(1, duration) };
-		currentEditingGroup = newGroup;
 	}
 
 	function submitAllAnswers() {
@@ -251,7 +190,7 @@
 		currentScenario = null;
 		playerConfigs = [];
 		playerSignalGroups = {};
-		currentEditingGroup = [];
+		editor.currentFlags = [];
 		currentPlayerIndex = 0;
 		collaborativeTask.clear();
 		pauseTimer();
@@ -500,10 +439,10 @@
 				</div>
 			</div>
 
-			{#if errorMessage}
+			{#if editor.errorMessage}
 				<div class="flex items-center gap-2 p-4 bg-error-500/20 border border-error-500/50 rounded-lg text-error-500 mb-6">
 					<AlertTriangle class="w-5 h-5" />
-					<span>{errorMessage}</span>
+					<span>{editor.errorMessage}</span>
 				</div>
 			{/if}
 
@@ -615,258 +554,25 @@
 				</div>
 			</div>
 
-			{#if errorMessage}
-				<div class="flex items-center gap-2 p-4 bg-error-500/20 border border-error-500/50 rounded-lg text-error-500 mb-6">
-					<AlertTriangle class="w-5 h-5" />
-					<span>{errorMessage}</span>
-				</div>
-			{/if}
-			{#if successMessage}
-				<div class="flex items-center gap-2 p-4 bg-success-500/20 border border-success-500/50 rounded-lg text-success-500 mb-6">
-					<CheckCircle class="w-5 h-5" />
-					<span>{successMessage}</span>
-				</div>
-			{/if}
-
 			<div class="mb-6">
-				<div class="flex items-center justify-between mb-4">
-					<h3 class="text-xl font-bold text-surface-900-100-token">编排当前旗组（{currentPlayer.name}）</h3>
-					<button
-						onclick={() => (showLibrary = !showLibrary)}
-						class="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
-					>
-						<Plus class="w-4 h-4" />
-						从旗帜库选择
-					</button>
-				</div>
-
-				{#if showLibrary}
-					<div class="mb-6">
-						<FlagLibrary onSelect={addFlag} />
-					</div>
-				{/if}
-
-				<div class="mb-4">
-					<div class="flex items-center justify-between mb-3">
-						<span class="text-sm font-medium text-surface-600-400-token">当前编辑旗组</span>
-						{#if orderValidation && !orderValidation.valid}
-							<span class="text-xs text-error-500 flex items-center gap-1">
-								<AlertTriangle class="w-3 h-3" />
-								{orderValidation.message}
-							</span>
-						{/if}
-					</div>
-
-					{#if currentEditingGroup.length === 0}
-						<div class="border-2 border-dashed border-surface-300-600-token rounded-xl p-8 text-center text-surface-500">
-							点击上方按钮从旗帜库选择旗帜
-						</div>
-					{:else}
-						<div class="space-y-3">
-							{#each currentEditingGroup as sf, index (sf.flag.id + index)}
-								<div class="flex items-center gap-4 p-3 bg-surface-50-900-token rounded-lg border border-surface-200-700-token">
-									<div class="text-surface-400">
-										<GripVertical class="w-5 h-5" />
-									</div>
-									<FlagImage flag={sf.flag} size={50} />
-									<div class="flex-1">
-										<div class="flex items-center gap-2">
-											<span class="font-semibold text-surface-900-100-token">{sf.flag.code}</span>
-											<span class="text-sm text-surface-500">{sf.flag.name}</span>
-										</div>
-										<p class="text-xs text-surface-500 mt-1">{sf.flag.meaning}</p>
-									</div>
-									<div class="flex items-center gap-2 px-2 py-1 bg-surface-100-800-token rounded-lg">
-										<Clock class="w-3.5 h-3.5 text-primary-500" />
-										<input
-											type="number"
-											class="w-14 text-center text-sm font-bold bg-transparent border-none outline-none text-surface-900-100-token [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-											value={sf.duration}
-											onchange={(e) => updateCurrentFlagDuration(index, Number((e.target as HTMLInputElement).value))}
-											min={1}
-											max={20}
-										/>
-										<span class="text-xs text-surface-500">秒</span>
-									</div>
-									<div class="flex flex-col gap-1">
-										<button
-											onclick={() => moveFlag(index, index - 1)}
-											disabled={index === 0}
-											class="p-1 rounded hover:bg-surface-200-700-token disabled:opacity-30 disabled:cursor-not-allowed"
-										>
-											<ArrowUp class="w-4 h-4" />
-										</button>
-										<button
-											onclick={() => moveFlag(index, index + 1)}
-											disabled={index === currentEditingGroup.length - 1}
-											class="p-1 rounded hover:bg-surface-200-700-token disabled:opacity-30 disabled:cursor-not-allowed"
-										>
-											<ArrowDown class="w-4 h-4" />
-										</button>
-									</div>
-									<button
-										onclick={() => removeFlag(index)}
-										class="p-2 rounded hover:bg-error-500/20 text-error-500 transition-colors"
-									>
-										<Trash2 class="w-4 h-4" />
-									</button>
-								</div>
-							{/each}
-						</div>
-
-						<div class="mt-4 p-4 bg-primary-500/5 rounded-lg border border-primary-500/20">
-							<div class="flex items-center justify-between mb-2">
-								<label class="text-sm font-semibold text-surface-700-300-token flex items-center gap-2">
-									<Clock class="w-4 h-4 text-primary-500" />
-									该旗组整体停留时间
-								</label>
-							</div>
-							<div class="flex items-center gap-4">
-								<div class="flex items-center gap-2 flex-1">
-									<input
-										type="range"
-										class="flex-1 h-2 bg-surface-200-700-token rounded-lg appearance-none cursor-pointer accent-primary-500"
-										bind:value={currentGroupDuration}
-										min={1}
-										max={15}
-									/>
-									<span class="text-2xl font-bold text-primary-500 min-w-[60px] text-center">{currentGroupDuration}<span class="text-xs text-surface-500 font-normal ml-1">秒</span></span>
-								</div>
-								<div class="flex gap-2">
-									<button
-										onclick={() => (currentGroupDuration = 3)}
-										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 3 ? 'bg-primary-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
-									>3秒普通</button>
-									<button
-										onclick={() => (currentGroupDuration = 5)}
-										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 5 ? 'bg-warning-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
-									>5秒重要</button>
-									<button
-										onclick={() => (currentGroupDuration = 8)}
-										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 8 ? 'bg-error-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
-									>8秒紧急</button>
-								</div>
-							</div>
-						</div>
-					{/if}
-				</div>
-
-				{#if currentEditingGroup.length > 0}
-					<div class="flex justify-end gap-3">
-						<button
-							onclick={clearCurrent}
-							class="px-4 py-2 bg-surface-200-700-token hover:bg-surface-300-600-token rounded-lg transition-colors"
-						>
-							清空
-						</button>
-						<button
-							onclick={addToPlayerGroups}
-							disabled={orderValidation ? !orderValidation.valid : false}
-							class="flex items-center gap-2 px-6 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
-						>
-							<Plus class="w-4 h-4" />
-							添加到发送序列
-						</button>
-					</div>
-				{/if}
+				<FlagGroupEditor
+					{editor}
+					title="编排当前旗组（{currentPlayer.name}）"
+					addButtonText="添加到发送序列"
+					onAdd={addToPlayerGroups}
+					showGroupDuration={true}
+					useClampedDuration={true}
+				/>
 			</div>
 
-			<div class="bg-surface-50-900-token rounded-xl p-6 border border-surface-200-700-token">
-				<div class="flex items-center justify-between mb-4">
-					<h3 class="text-xl font-bold text-surface-900-100-token">
-						{currentPlayer.name} 的信号发送序列
-						<span class="text-sm font-normal text-surface-500 ml-2">({currentPlayerGroups.length} 个旗组)</span>
-					</h3>
-					<span class="text-xs text-surface-500">按发送顺序排列（从上到下）</span>
-				</div>
-
-				{#if currentPlayerGroups.length === 0}
-					<div class="border-2 border-dashed border-surface-300-600-token rounded-xl p-8 text-center text-surface-500">
-						还没有添加任何信号组。请先编排旗组并添加到序列中。
-					</div>
-				{:else}
-					<div class="space-y-4">
-						{#each currentPlayerGroups as group, index (group.id)}
-							<div class="p-4 bg-surface-100-800-token rounded-lg border border-surface-200-700-token">
-								<div class="flex items-start justify-between mb-3">
-									<div>
-										<div class="flex items-center gap-2 flex-wrap">
-											<span class="px-2 py-1 bg-primary-100-800-token text-primary-700-300-token text-xs font-semibold rounded">
-												发送 #{index + 1}
-											</span>
-											<span class="font-mono text-lg font-bold text-surface-900-100-token">
-												{group.flags.map(f => f.flag.code).join(' · ')}
-											</span>
-											<span class="flex items-center gap-1 px-2 py-0.5 bg-warning-500/20 text-warning-700 text-xs font-semibold rounded">
-												<Clock class="w-3 h-3" />
-												{group.duration}秒
-											</span>
-										</div>
-									</div>
-									<div class="flex items-center gap-2">
-										<button
-											onclick={() => movePlayerGroup(currentPlayer.name, index, index - 1)}
-											disabled={index === 0}
-											class="p-2 rounded hover:bg-surface-200-700-token disabled:opacity-30 disabled:cursor-not-allowed"
-										>
-											<ArrowUp class="w-4 h-4" />
-										</button>
-										<button
-											onclick={() => movePlayerGroup(currentPlayer.name, index, index + 1)}
-											disabled={index === currentPlayerGroups.length - 1}
-											class="p-2 rounded hover:bg-surface-200-700-token disabled:opacity-30 disabled:cursor-not-allowed"
-										>
-											<ArrowDown class="w-4 h-4" />
-										</button>
-										<button
-											onclick={() => removePlayerGroup(currentPlayer.name, group.id)}
-											class="p-2 rounded hover:bg-error-500/20 text-error-500 transition-colors"
-										>
-											<Trash2 class="w-4 h-4" />
-										</button>
-									</div>
-								</div>
-								<div class="space-y-2 mb-3">
-									{#each group.flags as sf, i (sf.flag.id + i)}
-										<div class="flex items-center gap-3 p-2 bg-surface-50-900-token rounded">
-											<FlagImage flag={sf.flag} size={28} />
-											<div class="flex-1">
-												<span class="text-xs font-mono font-bold text-surface-700-300-token">{sf.flag.code}</span>
-												<span class="text-xs text-surface-500 ml-2">{sf.flag.name}</span>
-											</div>
-										</div>
-									{/each}
-								</div>
-								<div class="flex items-center gap-3 p-2 bg-primary-500/5 rounded border border-primary-500/20">
-									<label class="text-xs font-semibold text-primary-600 whitespace-nowrap flex items-center gap-1">
-										<Clock class="w-3 h-3" />
-										组停留时间：
-									</label>
-									<input
-										type="range"
-										class="flex-1 h-1.5 bg-surface-200-700-token rounded appearance-none cursor-pointer accent-primary-500"
-										value={group.duration}
-										oninput={(e) => updateGroupDuration(currentPlayer.name, group.id, Number((e.target as HTMLInputElement).value))}
-										min={1}
-										max={15}
-									/>
-									<div class="flex items-center gap-1 min-w-[70px]">
-										<input
-											type="number"
-											class="w-10 text-center text-sm font-bold bg-transparent border-none outline-none text-primary-600 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-											value={group.duration}
-											onchange={(e) => updateGroupDuration(currentPlayer.name, group.id, Number((e.target as HTMLInputElement).value))}
-											min={1}
-											max={15}
-										/>
-										<span class="text-xs text-surface-500">秒</span>
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
+			<SignalGroupList
+				groups={currentPlayerGroups}
+				title="{currentPlayer.name} 的信号发送序列"
+				countLabel="个旗组"
+				onRemoveGroup={(id) => removePlayerGroup(currentPlayer.name, id)}
+				onMoveGroup={(from, to) => movePlayerGroup(currentPlayer.name, from, to)}
+				onUpdateGroupDuration={(groupId, duration) => updateGroupDuration(currentPlayer.name, groupId, duration)}
+			/>
 
 			<div class="mt-6 flex items-center justify-between">
 				<button

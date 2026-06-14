@@ -7,8 +7,10 @@ import type {
 	SignalFlag,
 	SignalGroup
 } from '$lib/types';
-import { validateSignalGroup, validateFlagOrder, generateId, analyzeSubstituteUsage, expandSignalCodes } from './validation';
-import { getFlagByCode } from '$lib/data/flags';
+import { validateSignalGroup, validateFlagOrder, generateId } from './validation';
+import { buildUserScenarioGroups, codesToFlags, normalizeCodes, codesMatch } from './groupConversion';
+
+export { buildUserScenarioGroups, codesToFlags } from './groupConversion';
 
 export interface ScenarioEvaluationResult {
 	totalScore: number;
@@ -323,40 +325,7 @@ function evaluateSpeed(reactionTime: number, timeLimit: number): number {
 	return SPEED_WEIGHT * 0.1;
 }
 
-function normalizeCodes(codes: string[]): string[] {
-	return codes
-		.map(c => c.toUpperCase().trim())
-		.filter(c => c.length > 0);
-}
 
-function codesMatch(a: string[], b: string[]): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) {
-		if (a[i] !== b[i]) return false;
-	}
-	return true;
-}
-
-export function buildUserScenarioGroups(groups: SignalGroup[]): UserScenarioGroup[] {
-	return groups.map((g, idx) => ({
-		id: g.id,
-		order: idx,
-		flags: g.flags,
-		codes: expandSignalCodes(g.flags),
-		duration: g.duration || 3
-	}));
-}
-
-export function codesToFlags(codes: string[]): SignalFlag[] {
-	const flags: SignalFlag[] = [];
-	for (const code of codes) {
-		const flag = getFlagByCode(code);
-		if (flag) {
-			flags.push({ flag, duration: 3 });
-		}
-	}
-	return flags;
-}
 
 export function createScenarioResult(
 	scenario: ScenarioInfo,

@@ -8,6 +8,8 @@ export { default as ScenarioMode } from './components/ScenarioMode.svelte';
 export { default as ScenarioResultPanel } from './components/ScenarioResultPanel.svelte';
 export { default as CollaborativeMode } from './components/CollaborativeMode.svelte';
 export { default as CollaborativeResultPanel } from './components/CollaborativeResultPanel.svelte';
+export { default as FlagGroupEditor } from './components/FlagGroupEditor.svelte';
+export { default as SignalGroupList } from './components/SignalGroupList.svelte';
 export * from './types';
 export * from './data/flags';
 export * from './data/scenarios';
@@ -15,6 +17,7 @@ export * from './data/collaborativeScenarios';
 export * from './stores/scenarioStore';
 export * from './stores/collaborativeStore';
 export * from './utils/scenarioEvaluation';
+export * from './utils/groupConversion';
 export {
 	evaluateCollaborativeTask,
 	createCollaborativeResult,
