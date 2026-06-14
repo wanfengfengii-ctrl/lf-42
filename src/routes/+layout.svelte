@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import '../app.css';
-	import { Flag, Dumbbell, BookOpen, Target } from 'lucide-svelte';
+	import { Flag, Dumbbell, BookOpen, Target, Users } from 'lucide-svelte';
 
 	let { children } = $props();
 
@@ -10,6 +10,7 @@
 		{ path: '/', label: '编排', icon: Flag },
 		{ path: '/train', label: '训练', icon: Dumbbell },
 		{ path: '/scenario', label: '情景任务', icon: Target },
+		{ path: '/collaborative', label: '协同演练', icon: Users },
 		{ path: '/review', label: '复盘', icon: BookOpen }
 	];
 </script>

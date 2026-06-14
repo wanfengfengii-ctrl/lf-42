@@ -256,3 +256,176 @@ export interface ScenarioStatistics {
 	strongestCategory: ScenarioCategory | null;
 }
 
+export type CollaborativeRoleType = 'own-ship' | 'target-ship' | 'pilot-vessel' | 'port-control';
+
+export interface CollaborativeRole {
+	type: CollaborativeRoleType;
+	name: string;
+	label: string;
+	description: string;
+	color: string;
+	iconName: string;
+}
+
+export interface RoleTask {
+	roleType: CollaborativeRoleType;
+	title: string;
+	description: string;
+	visibleInfo: string[];
+	hiddenInfo?: string[];
+	requiredGroups: RoleRequiredGroup[];
+}
+
+export interface RoleRequiredGroup {
+	id: string;
+	order: number;
+	codes: string[];
+	meaning: string;
+	purpose: string;
+	critical: boolean;
+	duration: number;
+	timeWindow?: { earliest: number; latest: number };
+	dependsOn?: { roleType: CollaborativeRoleType; groupId: string };
+}
+
+export interface CollaborativeScenarioInfo {
+	id: string;
+	title: string;
+	description: string;
+	context: string;
+	category: ScenarioCategory;
+	categoryLabel: string;
+	difficulty: 'easy' | 'medium' | 'hard';
+	timeLimit: number;
+	minPlayers: number;
+	maxPlayers: number;
+	availableRoles: CollaborativeRoleType[];
+	roleTasks: Partial<Record<CollaborativeRoleType, RoleTask>>;
+	collaborationRules: string[];
+	idealTimeline: IdealTimelineEvent[];
+}
+
+export interface IdealTimelineEvent {
+	id: string;
+	time: number;
+	roleType: CollaborativeRoleType;
+	groupCodes: string[];
+	meaning: string;
+	description: string;
+}
+
+export interface PlayerSignalAction {
+	id: string;
+	playerId: string;
+	roleType: CollaborativeRoleType;
+	timestamp: number;
+	groups: UserScenarioGroup[];
+	isSubmitted: boolean;
+}
+
+export interface TimelineEvent {
+	id: string;
+	time: number;
+	roleType: CollaborativeRoleType;
+	groupCodes: string[];
+	meaning: string;
+	isCorrect: boolean;
+	isConflict?: boolean;
+	conflictWith?: string[];
+}
+
+export interface RoleScoreBreakdown {
+	legality: number;
+	timing: number;
+	matching: number;
+	speed: number;
+	collaboration: number;
+}
+
+export interface RoleScore {
+	roleType: CollaborativeRoleType;
+	playerName: string;
+	totalScore: number;
+	maxScore: number;
+	breakdown: RoleScoreBreakdown;
+	errors: ScenarioErrorDetail[];
+}
+
+export interface ConflictDetail {
+	id: string;
+	time: number;
+	roles: CollaborativeRoleType[];
+	groupCodes: string[];
+	description: string;
+	severity: 'low' | 'medium' | 'high';
+	suggestion: string;
+}
+
+export interface CollaborativeScoreBreakdown {
+	consistency: number;
+	timing: number;
+	completeness: number;
+	collaboration: number;
+	speed: number;
+}
+
+export interface BestCollaborationPlan {
+	description: string;
+	steps: Array<{
+		time: string;
+		role: string;
+		action: string;
+		reason: string;
+	}>;
+}
+
+export interface CollaborativeResult {
+	id: string;
+	timestamp: number;
+	scenarioId: string;
+	scenarioTitle: string;
+	category: ScenarioCategory;
+	totalScore: number;
+	maxScore: number;
+	scoreBreakdown: CollaborativeScoreBreakdown;
+	roleScores: RoleScore[];
+	timeline: TimelineEvent[];
+	conflicts: ConflictDetail[];
+	bestPlan: BestCollaborationPlan;
+	reactionTime: number;
+	timeLimit: number;
+	isTimeout: boolean;
+	sessionId?: string;
+}
+
+export interface CollaborativeSession {
+	id: string;
+	startTime: number;
+	endTime?: number;
+	scenarioId: string;
+	players: Array<{ id: string; name: string; roleType: CollaborativeRoleType }>;
+	results: CollaborativeResult[];
+}
+
+export interface CollaborativeHistoryData {
+	sessionNum: number;
+	score: number;
+	consistency: number;
+	timing: number;
+	completeness: number;
+	collaboration: number;
+	playerCount: number;
+	timestamp: number;
+}
+
+export interface CollaborativeStatistics {
+	totalSessions: number;
+	averageScore: number;
+	averageConsistency: number;
+	averageTiming: number;
+	averageCompleteness: number;
+	averageCollaboration: number;
+	history: CollaborativeHistoryData[];
+	rolePerformance: Record<CollaborativeRoleType, { averageScore: number; sessionCount: number }>;
+}
+
