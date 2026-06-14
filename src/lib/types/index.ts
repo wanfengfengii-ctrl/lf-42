@@ -141,4 +141,115 @@ export interface Statistics {
 	reactionTimeTrend: { questionNum: number; time: number; category: ResultCategory; rollingAvg: number }[];
 }
 
-export type PageMode = 'compose' | 'train' | 'review';
+export type PageMode = 'compose' | 'train' | 'review' | 'scenario';
+
+export type ScenarioCategory = 'collision' | 'distress' | 'pilotage' | 'quarantine' | 'dangerous-cargo' | 'towing';
+
+export interface ScenarioInfo {
+	id: string;
+	category: ScenarioCategory;
+	categoryLabel: string;
+	title: string;
+	description: string;
+	context: string;
+	difficulty: 'easy' | 'medium' | 'hard';
+	timeLimit: number;
+	standardGroups: ScenarioStandardGroup[];
+	alternativeGroups: ScenarioAlternativeGroup[];
+	keyPoints: string[];
+}
+
+export interface ScenarioStandardGroup {
+	id: string;
+	order: number;
+	codes: string[];
+	meaning: string;
+	purpose: string;
+	critical: boolean;
+}
+
+export interface ScenarioAlternativeGroup {
+	id: string;
+	order: number;
+	codes: string[][];
+	meaning: string;
+	equivalenceLevel: 'equivalent' | 'acceptable' | 'partial';
+}
+
+export interface UserScenarioGroup {
+	id: string;
+	order: number;
+	flags: SignalFlag[];
+	codes: string[];
+}
+
+export interface ScenarioScoreBreakdown {
+	legality: number;
+	timing: number;
+	matching: number;
+	speed: number;
+}
+
+export interface ScenarioErrorDetail {
+	groupOrder: number;
+	groupCodes: string[];
+	errorType: 'missing-critical' | 'wrong-flags' | 'wrong-order' | 'invalid-group' | 'unnecessary-group';
+	errorMessage: string;
+	correctCodes?: string[];
+	correctMeaning?: string;
+}
+
+export interface ScenarioResult {
+	id: string;
+	timestamp: number;
+	scenarioId: string;
+	scenarioCategory: ScenarioCategory;
+	totalScore: number;
+	maxScore: number;
+	scoreBreakdown: ScenarioScoreBreakdown;
+	userGroups: UserScenarioGroup[];
+	errors: ScenarioErrorDetail[];
+	reactionTime: number;
+	timeLimit: number;
+	isTimeout: boolean;
+	alternativeSuggestions: ScenarioAlternativeGroup[];
+	sessionId?: string;
+}
+
+export interface ScenarioSession {
+	id: string;
+	startTime: number;
+	endTime?: number;
+	results: ScenarioResult[];
+	categoryFilter?: ScenarioCategory | 'all';
+}
+
+export interface ScenarioAbilityRadar {
+	category: ScenarioCategory;
+	categoryLabel: string;
+	legality: number;
+	timing: number;
+	matching: number;
+	speed: number;
+	overall: number;
+	taskCount: number;
+}
+
+export interface ScenarioHistoryData {
+	sessionNum: number;
+	score: number;
+	category: ScenarioCategory;
+	timestamp: number;
+}
+
+export interface ScenarioStatistics {
+	totalTasks: number;
+	averageScore: number;
+	categoryScores: Record<ScenarioCategory, number>;
+	categoryTaskCounts: Record<ScenarioCategory, number>;
+	abilityRadar: ScenarioAbilityRadar[];
+	history: ScenarioHistoryData[];
+	weakestCategory: ScenarioCategory | null;
+	strongestCategory: ScenarioCategory | null;
+}
+
