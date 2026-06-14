@@ -26,7 +26,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['D'],
 				meaning: '请让开我，我操纵困难',
 				purpose: '表明本船操纵受限，警告来船注意',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'collision-001-g2',
@@ -34,7 +35,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['E'],
 				meaning: '我正在向右转向',
 				purpose: '明确告知来船我船正在向右转向，按照避碰规则采取正确行动',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'collision-001-g3',
@@ -42,7 +44,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['U'],
 				meaning: '你正在临近危险',
 				purpose: '警示来船双方正在临近危险，敦促其采取避让行动',
-				critical: true
+				critical: true,
+				duration: 5
 			}
 		],
 		alternativeGroups: [
@@ -84,7 +87,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['I'],
 				meaning: '我正在向左转向',
 				purpose: '声明我船正在向左转向以避让右舷来船',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'collision-002-g2',
@@ -92,7 +96,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['S'],
 				meaning: '我机器正在倒车',
 				purpose: '表明我船正在减速以避免碰撞',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'collision-002-g3',
@@ -100,7 +105,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['X'],
 				meaning: '停止你的意图，注意我',
 				purpose: '提醒来船注意我船的避让行动',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -142,7 +148,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['N', 'C'],
 				meaning: '我船遇险，需要立即援助',
 				purpose: '核心遇险信号，表明船舶处于紧急危险状态',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'distress-001-g2',
@@ -150,7 +157,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['C', 'B'],
 				meaning: '本船失火，船上有爆炸品',
 				purpose: '表明遇险原因是失火且有危险品，警告救援方注意风险',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'distress-001-g3',
@@ -158,7 +166,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['V'],
 				meaning: '我需要援助',
 				purpose: '明确请求任何形式的援助',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'distress-001-g4',
@@ -166,7 +175,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['W'],
 				meaning: '我需要医疗援助',
 				purpose: '如有人员受伤，请求医疗援助',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -215,7 +225,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['B', 'D'],
 				meaning: '我船搁浅',
 				purpose: '明确表明船舶搁浅状态',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'distress-002-g2',
@@ -223,7 +234,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['Z'],
 				meaning: '我需要一艘拖船',
 				purpose: '请求拖船协助脱浅',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'distress-002-g3',
@@ -231,7 +243,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['A', 'N'],
 				meaning: '我船需要援助',
 				purpose: '表明需要一般性援助',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'distress-002-g4',
@@ -239,7 +252,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['M'],
 				meaning: '我船已停，并不对水移动',
 				purpose: '说明当前船舶处于搁浅静止状态',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -281,7 +295,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['G'],
 				meaning: '我需要引航员',
 				purpose: '明确向港口和引航站表明需要引航员',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'pilotage-001-g2',
@@ -289,7 +304,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['P'],
 				meaning: '在港内：我将要出航；在港外：我的网挂在障碍物上',
 				purpose: '在锚地/港外区域表明船舶状态，准备进港',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'pilotage-001-g3',
@@ -297,7 +313,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['D', 'L'],
 				meaning: '请报告你船的航向',
 				purpose: '与引航船/引航站沟通，说明意图',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -332,7 +349,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['H'],
 				meaning: '我船上有引航员',
 				purpose: '表明船上已有引航员，提醒其他船舶注意引航船享有优先权',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'pilotage-002-g2',
@@ -340,7 +358,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['D'],
 				meaning: '请让开我，我操纵困难',
 				purpose: '引航状态下船舶操纵受限，请求他船避让',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [],
@@ -366,7 +385,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['Q'],
 				meaning: '我船没有染疫，请发给进口检疫证',
 				purpose: '表明船舶无疫情，请求颁发检疫证（ pratique ）',
-				critical: true
+				critical: true,
+				duration: 5
 			}
 		],
 		alternativeGroups: [
@@ -401,7 +421,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['F', 'K'],
 				meaning: '我船有传染病患者',
 				purpose: '核心信号，表明船上存在传染病患者',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'quarantine-002-g2',
@@ -409,7 +430,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['F', 'L'],
 				meaning: '我船需要隔离',
 				purpose: '请求对船舶进行隔离处理',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'quarantine-002-g3',
@@ -417,7 +439,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['F', 'N'],
 				meaning: '请派医生',
 				purpose: '请求派遣医生上船诊疗',
-				critical: false
+				critical: false,
+				duration: 3
 			},
 			{
 				id: 'quarantine-002-g4',
@@ -425,7 +448,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['W'],
 				meaning: '我需要医疗援助',
 				purpose: '一般性医疗援助请求',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -467,7 +491,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['B'],
 				meaning: '我正在装卸或载运危险货物',
 				purpose: '核心信号，表明正在进行危险品相关作业',
-				critical: true
+				critical: true,
+				duration: 5
 			}
 		],
 		alternativeGroups: [],
@@ -494,7 +519,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['B'],
 				meaning: '我正在装卸或载运危险货物',
 				purpose: '继续表明危险品作业状态',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'dc-002-g2',
@@ -502,7 +528,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['C', 'B'],
 				meaning: '本船失火，船上有爆炸品',
 				purpose: '表明失火并涉及危险品，警告严重风险',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'dc-002-g3',
@@ -510,7 +537,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['V'],
 				meaning: '我需要援助',
 				purpose: '请求必要的消防援助',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -545,7 +573,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['T'],
 				meaning: '请让开我，我正在对拖作业',
 				purpose: '核心信号，表明正在进行拖带作业，请求他船避让',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'towing-001-g2',
@@ -553,7 +582,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['D'],
 				meaning: '请让开我，我操纵困难',
 				purpose: '拖带作业时操纵受限，进一步请求他船避让',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [
@@ -588,7 +618,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['B', 'H'],
 				meaning: '我船失去动力',
 				purpose: '表明被拖船（或拖船本身）失去动力',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'towing-002-g2',
@@ -596,7 +627,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['E', 'E', 'E'],
 				meaning: '本船主机或舵机损坏需要援助',
 				purpose: '说明紧急原因是机器/舵机损坏',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'towing-002-g3',
@@ -604,7 +636,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['Z'],
 				meaning: '我需要一艘拖船',
 				purpose: '请求额外拖船支援',
-				critical: true
+				critical: true,
+				duration: 5
 			},
 			{
 				id: 'towing-002-g4',
@@ -612,7 +645,8 @@ export const scenarios: ScenarioInfo[] = [
 				codes: ['U'],
 				meaning: '你正在临近危险',
 				purpose: '警告附近船舶注意失控漂移的危险',
-				critical: false
+				critical: false,
+				duration: 3
 			}
 		],
 		alternativeGroups: [

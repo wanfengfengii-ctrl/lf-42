@@ -79,7 +79,8 @@ function evaluateLegality(userGroups: UserScenarioGroup[]): { score: number; err
 			id: ug.id,
 			flags: ug.flags,
 			order: ug.order,
-			meaning: ''
+			meaning: '',
+			duration: ug.duration || 3
 		};
 
 		const orderValidation = validateFlagOrder(ug.flags);
@@ -122,6 +123,9 @@ function evaluateTiming(userGroups: UserScenarioGroup[], scenario: ScenarioInfo)
 	const standardGroups = [...scenario.standardGroups].sort((a, b) => a.order - b.order);
 	const standardCodesByOrder = standardGroups.map(sg => normalizeCodes(sg.codes));
 
+	const ORDER_WEIGHT = 0.6;
+	const DURATION_WEIGHT = 0.4;
+
 	const userCriticalOrder: number[] = [];
 	const standardCriticalOrder: number[] = [];
 
@@ -134,6 +138,8 @@ function evaluateTiming(userGroups: UserScenarioGroup[], scenario: ScenarioInfo)
 			}
 		});
 	});
+
+	let orderScore = TIMING_WEIGHT;
 
 	if (userCriticalOrder.length >= 2) {
 		let inversions = 0;
@@ -156,28 +162,59 @@ function evaluateTiming(userGroups: UserScenarioGroup[], scenario: ScenarioInfo)
 			});
 		}
 
-		const score = orderPreservation * TIMING_WEIGHT;
-		return { score, errors };
-	}
+		orderScore = orderPreservation * TIMING_WEIGHT;
+	} else {
+		let orderMatches = 0;
+		let totalComparisons = 0;
 
-	let orderMatches = 0;
-	let totalComparisons = 0;
-
-	for (let i = 0; i < standardCodesByOrder.length; i++) {
-		for (let j = i + 1; j < standardCodesByOrder.length; j++) {
-			const iUserIdx = userCodesByOrder.findIndex(uc => codesMatch(uc, standardCodesByOrder[i]));
-			const jUserIdx = userCodesByOrder.findIndex(uc => codesMatch(uc, standardCodesByOrder[j]));
-			if (iUserIdx >= 0 && jUserIdx >= 0) {
-				totalComparisons++;
-				if (iUserIdx < jUserIdx) {
-					orderMatches++;
+		for (let i = 0; i < standardCodesByOrder.length; i++) {
+			for (let j = i + 1; j < standardCodesByOrder.length; j++) {
+				const iUserIdx = userCodesByOrder.findIndex(uc => codesMatch(uc, standardCodesByOrder[i]));
+				const jUserIdx = userCodesByOrder.findIndex(uc => codesMatch(uc, standardCodesByOrder[j]));
+				if (iUserIdx >= 0 && jUserIdx >= 0) {
+					totalComparisons++;
+					if (iUserIdx < jUserIdx) {
+						orderMatches++;
+					}
 				}
 			}
 		}
+
+		orderScore = totalComparisons > 0 ? (orderMatches / totalComparisons) * TIMING_WEIGHT : TIMING_WEIGHT;
 	}
 
-	const score = totalComparisons > 0 ? (orderMatches / totalComparisons) * TIMING_WEIGHT : TIMING_WEIGHT;
-	return { score, errors };
+	let durationScoreRatio = 1;
+	const durationErrors: string[] = [];
+
+	standardGroups.forEach((sg, sIdx) => {
+		const sgNorm = normalizeCodes(sg.codes);
+		const userMatchIdx = userCodesByOrder.findIndex(uc => codesMatch(uc, sgNorm));
+
+		if (userMatchIdx >= 0 && userGroups[userMatchIdx]) {
+			const userDuration = userGroups[userMatchIdx].duration || 3;
+			const expectedDuration = sg.duration || 3;
+			const diffRatio = Math.abs(userDuration - expectedDuration) / expectedDuration;
+
+			if (diffRatio > 0.7) {
+				durationErrors.push(
+					`信号 ${sg.codes.join('')} 的停留时间（${userDuration}秒）与建议时间（${expectedDuration}秒）相差过大，${sg.critical ? '关键信号建议停留更久以确保对方看清' : '建议调整为更合理的时长'}`
+				);
+			}
+		}
+	});
+
+	if (durationErrors.length > 0) {
+		durationScoreRatio = Math.max(0, 1 - durationErrors.length / standardGroups.length * 0.5);
+		errors.push({
+			groupOrder: 0,
+			groupCodes: [],
+			errorType: 'wrong-order',
+			errorMessage: `时长配置建议：\n${durationErrors.map((e, i) => `${i + 1}. ${e}`).join('\n')}`
+		});
+	}
+
+	const finalScore = orderScore * ORDER_WEIGHT + TIMING_WEIGHT * DURATION_WEIGHT * durationScoreRatio;
+	return { score: finalScore, errors };
 }
 
 function evaluateMatching(
@@ -305,7 +342,8 @@ export function buildUserScenarioGroups(groups: SignalGroup[]): UserScenarioGrou
 		id: g.id,
 		order: idx,
 		flags: g.flags,
-		codes: expandSignalCodes(g.flags)
+		codes: expandSignalCodes(g.flags),
+		duration: g.duration || 3
 	}));
 }
 

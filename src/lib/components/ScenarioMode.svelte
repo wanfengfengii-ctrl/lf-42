@@ -29,6 +29,7 @@
 	let showLibrary = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
+	let currentGroupDuration = $state<number>(3);
 
 
 
@@ -106,6 +107,7 @@
 
 	function clearCurrent() {
 		currentEditingGroup = [];
+		currentGroupDuration = 3;
 	}
 
 	function addToSignalGroups() {
@@ -127,13 +129,37 @@
 			id: generateId(),
 			flags: [...currentEditingGroup],
 			order: signalGroups.length,
-			meaning
+			meaning,
+			duration: currentGroupDuration
 		};
 
 		signalGroups = [...signalGroups, group];
 		successMessage = '信号组已添加！';
 		setTimeout(() => { successMessage = null; }, 2000);
 		currentEditingGroup = [];
+		currentGroupDuration = 3;
+	}
+
+	function updateFlagDuration(groupId: string, flagIndex: number, duration: number) {
+		signalGroups = signalGroups.map(g => {
+			if (g.id !== groupId) return g;
+			const newFlags = [...g.flags];
+			newFlags[flagIndex] = { ...newFlags[flagIndex], duration: Math.max(1, duration) };
+			return { ...g, flags: newFlags };
+		});
+	}
+
+	function updateGroupDuration(groupId: string, duration: number) {
+		signalGroups = signalGroups.map(g => {
+			if (g.id !== groupId) return g;
+			return { ...g, duration: Math.max(1, duration) };
+		});
+	}
+
+	function updateCurrentFlagDuration(index: number, duration: number) {
+		const newGroup = [...currentEditingGroup];
+		newGroup[index] = { ...newGroup[index], duration: Math.max(1, duration) };
+		currentEditingGroup = newGroup;
 	}
 
 	function removeGroup(id: string) {
@@ -211,7 +237,7 @@
 			</div>
 
 			<div class="mb-6">
-				<label class="block text-sm font-medium text-surface-700-300-token mb-3">选择场景类别</label>
+				<h3 class="block text-sm font-medium text-surface-700-300-token mb-3">选择场景类别</h3>
 				<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
 					{#each categoryOptions as opt}
 						{@const Icon = opt.icon}
@@ -260,10 +286,10 @@
 			{/if}
 
 			<div>
-				<label class="block text-sm font-medium text-surface-700-300-token mb-3">
+				<h3 class="block text-sm font-medium text-surface-700-300-token mb-3">
 					选择具体任务场景
 					<span class="text-xs text-surface-500 ml-2">({filteredScenarios.length} 个可用场景)</span>
-				</label>
+				</h3>
 				<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
 					{#each filteredScenarios as scenario (scenario.id)}
 						<div
@@ -429,6 +455,18 @@
 										</div>
 										<p class="text-xs text-surface-500 mt-1">{sf.flag.meaning}</p>
 									</div>
+									<div class="flex items-center gap-2 px-2 py-1 bg-surface-100-800-token rounded-lg">
+										<Clock class="w-3.5 h-3.5 text-primary-500" />
+										<input
+											type="number"
+											class="w-14 text-center text-sm font-bold bg-transparent border-none outline-none text-surface-900-100-token [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+											value={sf.duration}
+											onchange={(e) => updateCurrentFlagDuration(index, Number((e.target as HTMLInputElement).value))}
+											min={1}
+											max={20}
+										/>
+										<span class="text-xs text-surface-500">秒</span>
+									</div>
 									<div class="flex flex-col gap-1">
 										<button
 											onclick={() => moveFlag(index, index - 1)}
@@ -453,6 +491,41 @@
 									</button>
 								</div>
 							{/each}
+						</div>
+
+						<div class="mt-4 p-4 bg-primary-500/5 rounded-lg border border-primary-500/20">
+							<div class="flex items-center justify-between mb-2">
+								<label class="text-sm font-semibold text-surface-700-300-token flex items-center gap-2">
+									<Clock class="w-4 h-4 text-primary-500" />
+									该旗组整体停留时间（建议关键信号停留更久）
+								</label>
+							</div>
+							<div class="flex items-center gap-4">
+								<div class="flex items-center gap-2">
+									<input
+										type="range"
+										class="flex-1 h-2 bg-surface-200-700-token rounded-lg appearance-none cursor-pointer accent-primary-500"
+										bind:value={currentGroupDuration}
+										min={1}
+										max={15}
+									/>
+									<span class="text-2xl font-bold text-primary-500 min-w-[60px] text-center">{currentGroupDuration}<span class="text-xs text-surface-500 font-normal ml-1">秒</span></span>
+								</div>
+								<div class="flex gap-2">
+									<button
+										onclick={() => currentGroupDuration = 3}
+										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 3 ? 'bg-primary-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
+									>3秒普通</button>
+									<button
+										onclick={() => currentGroupDuration = 5}
+										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 5 ? 'bg-warning-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
+									>5秒重要</button>
+									<button
+										onclick={() => currentGroupDuration = 8}
+										class="px-3 py-1 text-xs rounded-lg {currentGroupDuration === 8 ? 'bg-error-500 text-white' : 'bg-surface-200-700-token hover:bg-surface-300-600-token'}"
+									>8秒紧急</button>
+								</div>
+							</div>
 						</div>
 					{/if}
 				</div>
@@ -496,12 +569,16 @@
 							<div class="p-4 bg-surface-100-800-token rounded-lg border border-surface-200-700-token">
 								<div class="flex items-start justify-between mb-3">
 									<div>
-										<div class="flex items-center gap-2">
+										<div class="flex items-center gap-2 flex-wrap">
 											<span class="px-2 py-1 bg-primary-100-800-token text-primary-700-300-token text-xs font-semibold rounded">
 												发送 #{index + 1}
 											</span>
 											<span class="font-mono text-lg font-bold text-surface-900-100-token">
 												{group.flags.map(f => f.flag.code).join(' · ')}
+											</span>
+											<span class="flex items-center gap-1 px-2 py-0.5 bg-warning-500/20 text-warning-700 text-xs font-semibold rounded">
+												<Clock class="w-3 h-3" />
+												{group.duration}秒
 											</span>
 										</div>
 									</div>
@@ -528,13 +605,53 @@
 										</button>
 									</div>
 								</div>
-								<div class="flex items-center gap-3 flex-wrap">
+								<div class="space-y-2 mb-3">
 									{#each group.flags as sf, i (sf.flag.id + i)}
-										<div class="flex items-center gap-2 px-2 py-1 bg-surface-50-900-token rounded">
-											<FlagImage flag={sf.flag} size={30} />
-											<span class="text-xs font-mono text-surface-600-400-token">{sf.flag.code}</span>
+										<div class="flex items-center gap-3 p-2 bg-surface-50-900-token rounded">
+											<FlagImage flag={sf.flag} size={28} />
+											<div class="flex-1">
+												<span class="text-xs font-mono font-bold text-surface-700-300-token">{sf.flag.code}</span>
+												<span class="text-xs text-surface-500 ml-2">{sf.flag.name}</span>
+											</div>
+											<div class="flex items-center gap-1 text-xs text-surface-600-400-token">
+												<Clock class="w-3 h-3 text-primary-500" />
+												<input
+													type="number"
+													class="w-12 text-center text-xs font-bold bg-surface-100-800-token rounded px-1 py-0.5 border-none outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+													value={sf.duration}
+													onchange={(e) => updateFlagDuration(group.id, i, Number((e.target as HTMLInputElement).value))}
+													min={1}
+													max={20}
+												/>
+												<span>秒</span>
+											</div>
 										</div>
 									{/each}
+								</div>
+								<div class="flex items-center gap-3 p-2 bg-primary-500/5 rounded border border-primary-500/20">
+									<label class="text-xs font-semibold text-primary-600 whitespace-nowrap flex items-center gap-1">
+										<Clock class="w-3 h-3" />
+										组停留时间：
+									</label>
+									<input
+										type="range"
+										class="flex-1 h-1.5 bg-surface-200-700-token rounded appearance-none cursor-pointer accent-primary-500"
+										value={group.duration}
+										oninput={(e) => updateGroupDuration(group.id, Number((e.target as HTMLInputElement).value))}
+										min={1}
+										max={15}
+									/>
+									<div class="flex items-center gap-1 min-w-[70px]">
+										<input
+											type="number"
+											class="w-10 text-center text-sm font-bold bg-transparent border-none outline-none text-primary-600 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+											value={group.duration}
+											onchange={(e) => updateGroupDuration(group.id, Number((e.target as HTMLInputElement).value))}
+											min={1}
+											max={15}
+										/>
+										<span class="text-xs text-surface-500">秒</span>
+									</div>
 								</div>
 							</div>
 						{/each}

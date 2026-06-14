@@ -14,7 +14,8 @@ function createSignalGroupsStore() {
 				id: generateId(),
 				flags: [...flags],
 				order: 0,
-				meaning
+				meaning,
+				duration: 3
 			};
 
 			const orderValidation = validateFlagOrder(flags);
@@ -453,7 +454,8 @@ export function generateRandomSignal(difficulty: 'easy' | 'medium' | 'hard', val
 			id: generateId(),
 			flags,
 			order: 0,
-			meaning
+			meaning,
+			duration: 3
 		};
 		const validation = validateSignalGroup(group);
 		if (validation.valid) break;
@@ -465,7 +467,8 @@ export function generateRandomSignal(difficulty: 'easy' | 'medium' | 'hard', val
 		id: generateId(),
 		flags,
 		order: 0,
-		meaning
+		meaning,
+		duration: 3
 	};
 }
 

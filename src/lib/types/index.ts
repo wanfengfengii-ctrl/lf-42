@@ -18,6 +18,7 @@ export interface SignalGroup {
 	flags: SignalFlag[];
 	order: number;
 	meaning: string;
+	duration: number;
 }
 
 export interface ValidationResult {
@@ -166,6 +167,7 @@ export interface ScenarioStandardGroup {
 	meaning: string;
 	purpose: string;
 	critical: boolean;
+	duration: number;
 }
 
 export interface ScenarioAlternativeGroup {
@@ -181,6 +183,7 @@ export interface UserScenarioGroup {
 	order: number;
 	flags: SignalFlag[];
 	codes: string[];
+	duration: number;
 }
 
 export interface ScenarioScoreBreakdown {
